@@ -18,7 +18,8 @@ type CheckoutState = {
 export function CheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [tipPercent, setTipPercent] = useState(10);
+  const [tipEnabled, setTipEnabled] = useState(false);
+  const [tipPercent, setTipPercent] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState('');
   const [isPaying, setIsPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,9 +29,11 @@ export function CheckoutPage() {
   const hasValidContext = Boolean(checkoutState?.orderId) && subtotal > 0;
 
   const tipAmount = useMemo(() => {
+    if (!tipEnabled) return 0;
     if (customTip.trim()) return Number(customTip) || 0;
+    if (tipPercent == null) return 0;
     return (subtotal * tipPercent) / 100;
-  }, [customTip, subtotal, tipPercent]);
+  }, [customTip, subtotal, tipEnabled, tipPercent]);
 
   const handleCompletePayment = async () => {
     if (!checkoutState?.orderId) {
@@ -103,28 +106,52 @@ export function CheckoutPage() {
           </div>
 
           <div>
-            <p className="mb-3 text-sm font-medium">Bahşiş</p>
-            <div className="flex gap-2">
-              {tipOptions.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    setCustomTip('');
-                    setTipPercent(option);
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-medium">Bahşiş</p>
+              <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={tipEnabled}
+                  onChange={(e) => {
+                    const enabled = e.target.checked;
+                    setTipEnabled(enabled);
+                    if (!enabled) {
+                      setTipPercent(null);
+                      setCustomTip('');
+                    }
                   }}
-                  className="rounded-xl border px-4 py-2 text-sm font-medium"
-                >
-                  %{option}
-                </button>
-              ))}
+                />
+                İsteğe bağlı
+              </label>
             </div>
-            <input
-              value={customTip}
-              onChange={(e) => setCustomTip(e.target.value)}
-              placeholder="Serbest tutar"
-              className="mt-3 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none"
-            />
+
+            <div className={`space-y-3 ${tipEnabled ? 'opacity-100' : 'pointer-events-none opacity-50'}`}>
+              <div className="flex gap-2">
+                {tipOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      setCustomTip('');
+                      setTipEnabled(true);
+                      setTipPercent(option);
+                    }}
+                    className="rounded-xl border px-4 py-2 text-sm font-medium"
+                  >
+                    %{option}
+                  </button>
+                ))}
+              </div>
+              <input
+                value={customTip}
+                onChange={(e) => {
+                  setTipEnabled(true);
+                  setCustomTip(e.target.value);
+                }}
+                placeholder="Serbest tutar"
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 outline-none"
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between border-t pt-4">

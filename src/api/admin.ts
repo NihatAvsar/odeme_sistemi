@@ -7,6 +7,7 @@ export type AdminTableDto = {
   code: string;
   name?: string | null;
   status: string;
+  releaseAt?: string | null;
   sessions: Array<{
     id: string;
     orders: Array<{
@@ -48,6 +49,13 @@ export async function createAdminTables(input: { restaurantId?: string; count: n
 
 export async function getAdminTable(tableId: string) {
   return fetchJSON<AdminTableDto>(`/api/admin/tables/${tableId}`, {
+    headers: { 'x-admin-secret': getAdminSecret() },
+  });
+}
+
+export async function cashSettleAdminTable(tableId: string) {
+  return fetchJSON<unknown>(`/api/admin/tables/${tableId}/cash-settle`, {
+    method: 'POST',
     headers: { 'x-admin-secret': getAdminSecret() },
   });
 }

@@ -1,8 +1,10 @@
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import { MockPaymentProvider } from '../providers/mock-payment-provider.js';
 import type { PaymentConfirmInput, PaymentInitiateInput } from '../types/payment.js';
 import { realtimeGateway } from '../lib/realtime.js';
+import { scheduleTableCleanup } from './table-release.service.js';
 
 type SelectedItem = {
   id: string;
@@ -41,6 +43,132 @@ const providers = {
 } as const;
 
 export class PaymentService {
+  private async finalizeSuccessfulPayment(paymentId: string, providerRef?: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        order: {
+          include: {
+            session: {
+              include: { table: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    if (payment.status === 'SUCCESS' && payment.processedAt) {
+      return payment;
+    }
+
+    const updatedPayment = await prisma.$transaction(async (tx) => {
+      const paymentAmount = Number(payment.amount);
+      const remainingAfter = Number(payment.order.remaining) - paymentAmount;
+      const paidTotalAfter = Number(payment.order.paidTotal) + paymentAmount;
+
+      const selectedItems = normalizeSelectedItems(payment.metadata);
+
+      const paidPayment = await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'SUCCESS',
+          processedAt: new Date(),
+          providerRef: providerRef ?? payment.providerRef,
+        },
+      });
+
+      if (payment.type === 'ITEM_SPLIT' && selectedItems.length > 0) {
+        const orderItems = await tx.orderItem.findMany({
+          where: {
+            orderId: payment.orderId,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+
+        const orderItemsByGroup = new Map<string, typeof orderItems>();
+        for (const item of orderItems) {
+          const key = buildOrderItemKey(item);
+          const list = orderItemsByGroup.get(key) ?? [];
+          list.push(item);
+          orderItemsByGroup.set(key, list);
+        }
+
+        for (const selected of selectedItems) {
+          const group = orderItemsByGroup.get(selected.id) ?? [];
+          if (group.length === 0) continue;
+
+          let remainingToApply = selected.quantity;
+          const unitPrice = Number(group[0].unitPriceSnapshot);
+
+          for (const orderItem of group) {
+            if (remainingToApply <= 0) break;
+
+            const availableQty = Math.max(0, orderItem.quantity - orderItem.paidQuantity);
+            const applyQty = Math.min(remainingToApply, availableQty);
+            if (applyQty <= 0) continue;
+
+            const nextPaidQty = orderItem.paidQuantity + applyQty;
+            const nextStatus = nextPaidQty >= orderItem.quantity ? 'PAID' : 'PARTIALLY_PAID';
+
+            await tx.orderItem.update({
+              where: { id: orderItem.id },
+              data: {
+                paidQuantity: nextPaidQty,
+                status: nextStatus,
+                version: { increment: 1 },
+              },
+            });
+
+            await tx.paymentAllocation.create({
+              data: {
+                paymentId: payment.id,
+                orderItemId: orderItem.id,
+                quantity: applyQty,
+                amount: unitPrice * applyQty,
+              },
+            });
+
+            remainingToApply -= applyQty;
+          }
+        }
+      }
+
+      await tx.order.update({
+        where: { id: payment.orderId },
+        data: {
+          paidTotal: paidTotalAfter,
+          remaining: Math.max(0, remainingAfter),
+          status: remainingAfter <= 0 ? 'PAID' : 'PARTIALLY_PAID',
+          closedAt: remainingAfter <= 0 ? new Date() : payment.order.closedAt,
+          version: { increment: 1 },
+        },
+      });
+
+      if (remainingAfter <= 0) {
+        await scheduleTableCleanup(payment.order.session.table.id, payment.order.sessionId, new Date(), tx);
+      }
+
+      return paidPayment;
+    });
+
+    realtimeGateway.emitToOrder(payment.orderId, 'order.updated', {
+      orderId: payment.orderId,
+      tableId: payment.order.session.table.id,
+    });
+
+    realtimeGateway.emitToTable(payment.order.session.table.id, 'payment.updated', {
+      tableId: payment.order.session.table.id,
+      paymentId: payment.id,
+      status: 'SUCCESS',
+    });
+
+    return updatedPayment;
+  }
+
   async initiate(input: PaymentInitiateInput) {
     const provider = providers[input.provider ?? 'mock-stripe'] ?? providers['mock-stripe'];
 
@@ -147,15 +275,7 @@ export class PaymentService {
   async confirm(input: PaymentConfirmInput) {
     const payment = await prisma.payment.findUnique({
       where: { id: input.paymentId },
-      include: {
-        order: {
-          include: {
-            session: {
-              include: { table: true },
-            },
-          },
-        },
-      },
+      select: { id: true, status: true, provider: true, providerRef: true },
     });
 
     if (!payment) {
@@ -163,7 +283,7 @@ export class PaymentService {
     }
 
     if (payment.status === 'SUCCESS') {
-      return payment;
+      return this.finalizeSuccessfulPayment(input.paymentId, input.providerRef ?? payment.providerRef ?? undefined);
     }
 
     const provider = providers[payment.provider as keyof typeof providers] ?? providers['mock-stripe'];
@@ -182,104 +302,54 @@ export class PaymentService {
       });
     }
 
-    const updatedPayment = await prisma.$transaction(async (tx) => {
-      const paymentAmount = Number(payment.amount);
-      const remainingAfter = Number(payment.order.remaining) - paymentAmount;
-      const paidTotalAfter = Number(payment.order.paidTotal) + paymentAmount;
+    return this.finalizeSuccessfulPayment(input.paymentId, result.providerRef);
+  }
 
-      const selectedItems = normalizeSelectedItems(payment.metadata);
-
-      const paidPayment = await tx.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: 'SUCCESS',
-          processedAt: new Date(),
-          providerRef: result.providerRef,
+  async cashSettleTable(tableId: string, adminName = 'Kasada Ödendi') {
+    const order = await prisma.order.findFirst({
+      where: {
+        session: {
+          tableId,
         },
-      });
-
-      if (payment.type === 'ITEM_SPLIT' && selectedItems.length > 0) {
-        const itemMap = new Map(selectedItems.map((item) => [item.id, item.quantity]));
-        const orderItems = await tx.orderItem.findMany({
-          where: {
-            orderId: payment.orderId,
+        status: { in: ['OPEN', 'PARTIALLY_PAID'] },
+      },
+      include: {
+        session: {
+          include: {
+            table: true,
           },
-          orderBy: { createdAt: 'asc' },
-        });
-
-        const orderItemsByGroup = new Map<string, typeof orderItems>();
-        for (const item of orderItems) {
-          const key = buildOrderItemKey(item);
-          const list = orderItemsByGroup.get(key) ?? [];
-          list.push(item);
-          orderItemsByGroup.set(key, list);
-        }
-
-        for (const selected of selectedItems) {
-          const group = orderItemsByGroup.get(selected.id) ?? [];
-          if (group.length === 0) continue;
-
-          let remainingToApply = selected.quantity;
-          const unitPrice = Number(group[0].unitPriceSnapshot);
-
-          for (const orderItem of group) {
-            if (remainingToApply <= 0) break;
-
-            const availableQty = Math.max(0, orderItem.quantity - orderItem.paidQuantity);
-            const applyQty = Math.min(remainingToApply, availableQty);
-            if (applyQty <= 0) continue;
-
-            const nextPaidQty = orderItem.paidQuantity + applyQty;
-            const nextStatus = nextPaidQty >= orderItem.quantity ? 'PAID' : 'PARTIALLY_PAID';
-
-            await tx.orderItem.update({
-              where: { id: orderItem.id },
-              data: {
-                paidQuantity: nextPaidQty,
-                status: nextStatus,
-                version: { increment: 1 },
-              },
-            });
-
-            await tx.paymentAllocation.create({
-              data: {
-                paymentId: payment.id,
-                orderItemId: orderItem.id,
-                quantity: applyQty,
-                amount: unitPrice * applyQty,
-              },
-            });
-
-            remainingToApply -= applyQty;
-          }
-        }
-      }
-
-      const updatedOrder = await tx.order.update({
-        where: { id: payment.orderId },
-        data: {
-          paidTotal: paidTotalAfter,
-          remaining: Math.max(0, remainingAfter),
-          status: remainingAfter <= 0 ? 'PAID' : 'PARTIALLY_PAID',
-          version: { increment: 1 },
         },
-      });
-
-      return { paidPayment, updatedOrder };
+      },
+      orderBy: { updatedAt: 'desc' },
     });
 
-    realtimeGateway.emitToOrder(payment.orderId, 'order.updated', {
-      orderId: payment.orderId,
-      tableId: payment.order.session.table.id,
+    if (!order) {
+      throw new Error('Open order not found');
+    }
+
+    const remainingAmount = Number(order.remaining);
+    if (remainingAmount <= 0) {
+      throw new Error('Order already settled');
+    }
+
+    const payment = await prisma.payment.create({
+      data: {
+        orderId: order.id,
+        type: 'FULL_BILL',
+        status: 'SUCCESS',
+        amount: remainingAmount,
+        tipAmount: 0,
+        provider: 'cash-register',
+        providerRef: `cash-${order.id}-${randomUUID()}`,
+        idempotencyKey: `cash-${order.id}-${randomUUID()}`,
+        payerName: adminName,
+        metadata: {
+          settledBy: 'cash-register',
+        } as Prisma.InputJsonValue,
+      },
     });
 
-    realtimeGateway.emitToTable(payment.order.session.table.id, 'payment.updated', {
-      tableId: payment.order.session.table.id,
-      paymentId: payment.id,
-      status: 'SUCCESS',
-    });
-
-    return updatedPayment.paidPayment;
+    return this.finalizeSuccessfulPayment(payment.id, payment.providerRef ?? undefined);
   }
 }
 

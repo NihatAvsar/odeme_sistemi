@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { groupOrderItems } from '../lib/order-presenter.js';
+import { releaseTableIfDue } from '../services/table-release.service.js';
 
 export const tablesRouter = Router();
 
@@ -16,6 +17,17 @@ tablesRouter.get('/:tableCode', async (req, res, next) => {
     if (!table) {
       res.status(404).json({ message: 'Table not found' });
       return;
+    }
+
+    if (table.status === 'CLEANING' && table.releaseAt) {
+      if (table.releaseAt > new Date()) {
+        res.status(423).json({
+          message: 'Ödeme alındı, masa 3 dakika içinde boşalacak.',
+        });
+        return;
+      }
+
+      await releaseTableIfDue(table.id);
     }
 
     const session = await prisma.tableSession.findFirst({

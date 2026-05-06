@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import { requireAdminAuth } from '../middleware/admin-auth.js';
 import { adminMenuRouter } from './admin-menu.controller.js';
 import { groupOrderItems } from '../lib/order-presenter.js';
+import { paymentService } from '../services/payment.service.js';
+import { releaseDueTables } from '../services/table-release.service.js';
 
 export const adminRouter = Router();
 
@@ -70,8 +72,19 @@ adminRouter.post('/tables', async (req, res, next) => {
   }
 });
 
+adminRouter.post('/tables/:tableId/cash-settle', async (req, res, next) => {
+  try {
+    const result = await paymentService.cashSettleTable(req.params.tableId, 'Kasada Ödendi');
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRouter.get('/tables', async (_req, res, next) => {
   try {
+    await releaseDueTables();
+
     const tables = await prisma.table.findMany({
       include: {
         sessions: {
@@ -98,6 +111,8 @@ adminRouter.get('/tables', async (_req, res, next) => {
 
 adminRouter.get('/tables/:tableId', async (req, res, next) => {
   try {
+    await releaseDueTables();
+
     const table = await prisma.table.findUnique({
       where: { id: req.params.tableId },
       include: {

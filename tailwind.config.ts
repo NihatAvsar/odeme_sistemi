@@ -4,14 +4,14 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      colors: {
-        brand: {
-          50: '#eefbf8',
-          500: '#14b8a6',
-          600: '#0f766e',
-          700: '#115e59',
+        colors: {
+          brand: {
+          50: '#fff7ed',
+          500: '#f97316',
+          600: '#ea580c',
+          700: '#c2410c',
+          },
         },
-      },
     },
   },
   plugins: [],
