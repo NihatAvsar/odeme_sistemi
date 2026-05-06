@@ -66,7 +66,7 @@ export function CheckoutPage() {
         providerRef: initiated.intent.providerRef,
       });
 
-      navigate('/checkout/success');
+      navigate('/checkout/success', { state: { tableId: checkoutState.tableId } });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Odeme su an tamamlanamadi. Lutfen tekrar deneyin.';
       setError(message);
@@ -80,7 +80,7 @@ export function CheckoutPage() {
       <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
         <button
           type="button"
-          onClick={() => navigate('/')}
+          onClick={() => navigate(checkoutState?.tableId ? `/table/${checkoutState.tableId}` : '/')}
           className="mb-4 inline-flex items-center gap-2 rounded-xl border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
         >
           <span aria-hidden="true">←</span>

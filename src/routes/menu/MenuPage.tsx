@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createOrderRequest } from '../../api/order-requests';
 import { getMenu, type MenuCategoryDto } from '../../api/menu';
+import { getSocket } from '../../lib/socket';
+import { getTableContext } from '../../api/tables';
 
 type CartState = Record<string, number>;
 
 export function MenuPage() {
-  const { tableId = 'table-12' } = useParams();
+  const { tableCode = '12' } = useParams();
   const navigate = useNavigate();
   const [categories, setCategories] = useState<MenuCategoryDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,11 +22,25 @@ export function MenuPage() {
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    void getMenu(tableId)
+    void getTableContext(tableCode)
+      .then((context) => getMenu(context.table.code))
       .then((data) => {
         if (!mounted) return;
         setCategories(data.categories);
         setError(null);
+
+        const socket = getSocket();
+        socket.connect();
+        socket.emit('restaurant:join', data.table.restaurantId);
+
+        const onMenuUpdated = () => {
+          void getTableContext(tableCode)
+            .then((context) => getMenu(context.table.code))
+            .then((next) => mounted && setCategories(next.categories));
+        };
+
+        socket.off('menu.updated');
+        socket.on('menu.updated', onMenuUpdated);
       })
       .catch((err) => {
         if (!mounted) return;
@@ -36,8 +52,9 @@ export function MenuPage() {
 
     return () => {
       mounted = false;
+      getSocket().off('menu.updated');
     };
-  }, [tableId]);
+  }, [tableCode]);
 
   const cartItems = useMemo(() => {
     const items: Array<{ menuItemId: string; quantity: number; name: string; price: number }> = [];
@@ -71,16 +88,26 @@ export function MenuPage() {
 
   const handleSubmit = async () => {
     if (cartItems.length === 0) return;
+
+    const unavailable = categories.some((category) =>
+      category.items.some((item) => (cart[item.id] ?? 0) > 0 && (!item.isActive || item.isOutOfStock)),
+    );
+
+    if (unavailable) {
+      setError('Sepette stokta olmayan veya pasif ürün var.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await createOrderRequest({
-        tableId,
+        tableId: tableCode,
         requestedBy,
         note,
         items: cartItems,
       });
       setCart({});
-      navigate('/table/' + tableId);
+      navigate('/table/' + tableCode);
     } finally {
       setSubmitting(false);
     }
@@ -91,9 +118,9 @@ export function MenuPage() {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Menü</h1>
-          <p className="text-sm text-slate-500">Masa {tableId}</p>
+          <p className="text-sm text-slate-500">Masa {tableCode}</p>
         </div>
-        <Link to={`/table/${tableId}`} className="rounded-xl border px-3 py-2 text-sm font-medium">
+        <Link to={`/table/${tableCode}`} className="rounded-xl border px-3 py-2 text-sm font-medium">
           Adisyona Dön
         </Link>
       </div>
@@ -116,14 +143,23 @@ export function MenuPage() {
                           <h3 className="font-medium">{item.name}</h3>
                           <p className="text-sm text-slate-500">{item.description}</p>
                         </div>
-                        <span className="font-semibold">{Number(item.price).toFixed(2)} TL</span>
+                        <div className="text-right">
+                          <span className="font-semibold">{Number(item.price).toFixed(2)} TL</span>
+                          {!item.isActive ? <p className="text-xs text-slate-400">Pasif</p> : null}
+                          {item.isOutOfStock ? <p className="text-xs font-medium text-rose-600">Stok yok</p> : null}
+                        </div>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
                         <button type="button" onClick={() => changeQty(item.id, -1)} className="h-9 w-9 rounded-full border">
                           -
                         </button>
                         <span className="w-8 text-center font-semibold">{qty}</span>
-                        <button type="button" onClick={() => changeQty(item.id, 1)} className="h-9 w-9 rounded-full border">
+                        <button
+                          type="button"
+                          onClick={() => changeQty(item.id, 1)}
+                          disabled={!item.isActive || item.isOutOfStock}
+                          className="h-9 w-9 rounded-full border disabled:cursor-not-allowed disabled:opacity-40"
+                        >
                           +
                         </button>
                       </div>

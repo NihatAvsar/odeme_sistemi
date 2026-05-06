@@ -3,10 +3,12 @@ import { prisma } from '../lib/prisma.js';
 
 export const menuRouter = Router();
 
-menuRouter.get('/:tableId', async (req, res, next) => {
+menuRouter.get('/:tableCode', async (req, res, next) => {
   try {
-    const table = await prisma.table.findUnique({
-      where: { id: req.params.tableId },
+    const table = await prisma.table.findFirst({
+      where: {
+        OR: [{ code: req.params.tableCode }, { id: req.params.tableCode }],
+      },
       include: { restaurant: true },
     });
 
@@ -25,6 +27,16 @@ menuRouter.get('/:tableId', async (req, res, next) => {
         items: {
           where: { isActive: true },
           orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            currency: true,
+            imageUrl: true,
+            isActive: true,
+            isOutOfStock: true,
+          },
         },
       },
     });

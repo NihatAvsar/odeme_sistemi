@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { hasAdminAuth } from '../middleware/admin-auth.js';
 import { realtimeGateway } from '../lib/realtime.js';
 
 type RequestedItem = {
@@ -23,8 +24,10 @@ orderRequestsRouter.post('/', async (req, res, next) => {
       return;
     }
 
-    const table = await prisma.table.findUnique({
-      where: { id: tableId },
+    const table = await prisma.table.findFirst({
+      where: {
+        OR: [{ id: tableId }, { code: tableId }],
+      },
       include: {
         restaurant: true,
         sessions: {
@@ -38,6 +41,22 @@ orderRequestsRouter.post('/', async (req, res, next) => {
     if (!table || table.sessions.length === 0) {
       res.status(404).json({ message: 'Open table session not found' });
       return;
+    }
+
+    const menuItems = await prisma.menuItem.findMany({
+      where: {
+        id: { in: items.map((item) => item.menuItemId) },
+        restaurantId: table.restaurantId,
+      },
+    });
+
+    const menuItemMap = new Map(menuItems.map((item) => [item.id, item]));
+    for (const item of items) {
+      const menuItem = menuItemMap.get(item.menuItemId);
+      if (!menuItem || !menuItem.isActive || menuItem.isOutOfStock) {
+        res.status(400).json({ message: `Menu item unavailable: ${item.menuItemId}` });
+        return;
+      }
     }
 
     const orderRequest = await prisma.orderRequest.create({
@@ -58,6 +77,11 @@ orderRequestsRouter.post('/', async (req, res, next) => {
       tableId: table.id,
       orderRequestId: orderRequest.id,
     });
+    // Admin paneli de dinleyebilsin
+    realtimeGateway.emitToRestaurant(table.restaurantId, 'order-request.created', {
+      tableId: table.id,
+      orderRequestId: orderRequest.id,
+    });
 
     res.status(201).json(orderRequest);
   } catch (error) {
@@ -66,6 +90,7 @@ orderRequestsRouter.post('/', async (req, res, next) => {
 });
 
 orderRequestsRouter.get('/', async (req, res, next) => {
+  if (!hasAdminAuth(req, res)) return;
   try {
     const status = typeof req.query.status === 'string' ? req.query.status : 'PENDING_APPROVAL';
 
@@ -86,6 +111,7 @@ orderRequestsRouter.get('/', async (req, res, next) => {
 });
 
 orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
+  if (!hasAdminAuth(req, res)) return;
   try {
     const { adminName } = req.body as { adminName?: string };
     const request = await prisma.orderRequest.findUnique({
@@ -136,16 +162,42 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
         if (!menuItem) continue;
 
         const quantity = Math.max(1, Math.floor(item.quantity));
-        await tx.orderItem.create({
-          data: {
+        const existingLine = await tx.orderItem.findFirst({
+          where: {
             orderId: order.id,
             menuItemId: menuItem.id,
-            nameSnapshot: menuItem.name,
             unitPriceSnapshot: menuItem.price,
-            quantity,
-            lineTotal: Number(menuItem.price) * quantity,
+            notes: null,
           },
         });
+
+        if (existingLine) {
+          const nextQuantity = existingLine.quantity + quantity;
+          const nextLineTotal = Number(existingLine.lineTotal) + Number(menuItem.price) * quantity;
+          const nextPaidQuantity = Math.min(existingLine.paidQuantity, nextQuantity);
+
+          await tx.orderItem.update({
+            where: { id: existingLine.id },
+            data: {
+              quantity: nextQuantity,
+              lineTotal: nextLineTotal,
+              paidQuantity: nextPaidQuantity,
+              status: nextPaidQuantity >= nextQuantity ? 'PAID' : nextPaidQuantity > 0 ? 'PARTIALLY_PAID' : 'OPEN',
+              version: { increment: 1 },
+            },
+          });
+        } else {
+          await tx.orderItem.create({
+            data: {
+              orderId: order.id,
+              menuItemId: menuItem.id,
+              nameSnapshot: menuItem.name,
+              unitPriceSnapshot: menuItem.price,
+              quantity,
+              lineTotal: Number(menuItem.price) * quantity,
+            },
+          });
+        }
       }
 
       const updatedItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
@@ -187,6 +239,11 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
       orderRequestId: request.id,
       status: 'APPROVED',
     });
+    realtimeGateway.emitToRestaurant(request.restaurantId, 'order-request.updated', {
+      tableId: request.tableSession.table.id,
+      orderRequestId: request.id,
+      status: 'APPROVED',
+    });
 
     res.json(approvedOrder);
   } catch (error) {
@@ -195,6 +252,7 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
 });
 
 orderRequestsRouter.post('/:id/reject', async (req, res, next) => {
+  if (!hasAdminAuth(req, res)) return;
   try {
     const { adminName, reason } = req.body as { adminName?: string; reason?: string };
     const request = await prisma.orderRequest.findUnique({
@@ -217,6 +275,11 @@ orderRequestsRouter.post('/:id/reject', async (req, res, next) => {
     });
 
     realtimeGateway.emitToTable(request.tableSession.table.id, 'order-request.updated', {
+      tableId: request.tableSession.table.id,
+      orderRequestId: request.id,
+      status: 'REJECTED',
+    });
+    realtimeGateway.emitToRestaurant(request.restaurantId, 'order-request.updated', {
       tableId: request.tableSession.table.id,
       orderRequestId: request.id,
       status: 'REJECTED',

@@ -8,6 +8,7 @@ export type RealtimeEvents = {
   'table.updated': (payload: { tableId: string; status: string }) => void;
   'order-request.created': (payload: { tableId: string; orderRequestId: string }) => void;
   'order-request.updated': (payload: { tableId: string; orderRequestId: string; status: string }) => void;
+  'menu.updated': (payload: { restaurantId: string }) => void;
 };
 
 export class RealtimeGateway {
@@ -29,6 +30,15 @@ export class RealtimeGateway {
       socket.on('order:join', (orderId: string) => {
         socket.join(`order:${orderId}`);
       });
+
+      socket.on('restaurant:join', (restaurantId: string) => {
+        socket.join(`restaurant:${restaurantId}`);
+      });
+
+      // Admin paneli tüm restaurant event'lerini dinlemek için
+      socket.on('admin:join', (restaurantId: string) => {
+        socket.join(`restaurant:${restaurantId}`);
+      });
     });
   }
 
@@ -38,6 +48,10 @@ export class RealtimeGateway {
 
   emitToOrder<T extends keyof RealtimeEvents>(orderId: string, event: T, payload: Parameters<RealtimeEvents[T]>[0]) {
     this.io?.to(`order:${orderId}`).emit(event, payload);
+  }
+
+  emitToRestaurant<T extends keyof RealtimeEvents>(restaurantId: string, event: T, payload: Parameters<RealtimeEvents[T]>[0]) {
+    this.io?.to(`restaurant:${restaurantId}`).emit(event, payload);
   }
 }
 

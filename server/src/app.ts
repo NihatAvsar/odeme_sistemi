@@ -6,6 +6,7 @@ import { orderRequestsRouter } from './controllers/order-requests.controller.js'
 import { paymentsRouter } from './controllers/payments.controller.js';
 import { webhookRouter } from './controllers/webhook.controller.js';
 import { ordersRouter } from './controllers/orders.controller.js';
+import { tablesRouter } from './controllers/tables.controller.js';
 import { env } from './config/env.js';
 
 export function createApp() {
@@ -21,6 +22,7 @@ export function createApp() {
   app.use('/api/payments', paymentsRouter);
   app.use('/api/menu', menuRouter);
   app.use('/api/order-requests', orderRequestsRouter);
+  app.use('/api/tables', tablesRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/webhooks', webhookRouter);

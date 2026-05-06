@@ -139,6 +139,8 @@ model MenuItem {
   price        Decimal  @db.Decimal(10, 2)
   currency     String   @default("TRY")
   isActive     Boolean  @default(true)
+  isOutOfStock Boolean  @default(false)
+  updatedBy    String?
   imageUrl     String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

@@ -7,6 +7,8 @@ export type MenuItemDto = {
   price: string | number;
   currency: string;
   imageUrl?: string | null;
+  isActive: boolean;
+  isOutOfStock: boolean;
 };
 
 export type MenuCategoryDto = {
@@ -16,7 +18,7 @@ export type MenuCategoryDto = {
 };
 
 export type MenuResponseDto = {
-  table: { id: string; name?: string | null; code: string };
+  table: { id: string; restaurantId: string; name?: string | null; code: string };
   categories: MenuCategoryDto[];
 };
 

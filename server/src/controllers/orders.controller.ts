@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { groupOrderItems } from '../lib/order-presenter.js';
 
 export const ordersRouter = Router();
 
@@ -19,7 +20,10 @@ ordersRouter.get('/:orderId', async (req, res, next) => {
       return;
     }
 
-    res.json(order);
+    res.json({
+      ...order,
+      items: groupOrderItems(order.items),
+    });
   } catch (error) {
     next(error);
   }

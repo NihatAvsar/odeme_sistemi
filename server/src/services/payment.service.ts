@@ -9,6 +9,14 @@ type SelectedItem = {
   quantity: number;
 };
 
+function buildOrderItemKey(item: {
+  menuItemId: string | null;
+  unitPriceSnapshot: { toString(): string } | string | number;
+  notes: string | null;
+}) {
+  return [item.menuItemId ?? 'none', String(item.unitPriceSnapshot), item.notes ?? ''].join('|');
+}
+
 function normalizeSelectedItems(metadata: unknown): SelectedItem[] {
   if (!metadata || typeof metadata !== 'object') return [];
 
@@ -70,25 +78,31 @@ export class PaymentService {
       const orderItems = await prisma.orderItem.findMany({
         where: {
           orderId: input.orderId,
-          id: { in: selectedItems.map((item) => item.id) },
         },
       });
 
-      const orderItemMap = new Map(orderItems.map((item) => [item.id, item]));
+      const groupedOrderItems = new Map<string, typeof orderItems>();
+      for (const item of orderItems) {
+        const key = buildOrderItemKey(item);
+        const list = groupedOrderItems.get(key) ?? [];
+        list.push(item);
+        groupedOrderItems.set(key, list);
+      }
 
       computedAmount = 0;
       for (const selected of selectedItems) {
-        const dbItem = orderItemMap.get(selected.id);
-        if (!dbItem) {
+        const group = groupedOrderItems.get(selected.id);
+        if (!group || group.length === 0) {
           throw new Error('Selected item not found in order');
         }
 
-        const availableQty = Math.max(0, dbItem.quantity - dbItem.paidQuantity);
+        const availableQty = group.reduce((sum, item) => sum + Math.max(0, item.quantity - item.paidQuantity), 0);
         if (selected.quantity > availableQty) {
           throw new Error('Selected quantity exceeds available quantity');
         }
 
-        computedAmount += Number(dbItem.unitPriceSnapshot) * selected.quantity;
+        const unitPrice = Number(group[0].unitPriceSnapshot);
+        computedAmount += unitPrice * selected.quantity;
       }
     }
 
@@ -189,38 +203,55 @@ export class PaymentService {
         const orderItems = await tx.orderItem.findMany({
           where: {
             orderId: payment.orderId,
-            id: { in: selectedItems.map((item) => item.id) },
           },
+          orderBy: { createdAt: 'asc' },
         });
 
-        for (const orderItem of orderItems) {
-          const selectedQty = itemMap.get(orderItem.id) ?? 0;
-          if (selectedQty <= 0) continue;
+        const orderItemsByGroup = new Map<string, typeof orderItems>();
+        for (const item of orderItems) {
+          const key = buildOrderItemKey(item);
+          const list = orderItemsByGroup.get(key) ?? [];
+          list.push(item);
+          orderItemsByGroup.set(key, list);
+        }
 
-          const availableQty = Math.max(0, orderItem.quantity - orderItem.paidQuantity);
-          const applyQty = Math.min(selectedQty, availableQty);
-          if (applyQty <= 0) continue;
+        for (const selected of selectedItems) {
+          const group = orderItemsByGroup.get(selected.id) ?? [];
+          if (group.length === 0) continue;
 
-          const nextPaidQty = orderItem.paidQuantity + applyQty;
-          const nextStatus = nextPaidQty >= orderItem.quantity ? 'PAID' : 'PARTIALLY_PAID';
+          let remainingToApply = selected.quantity;
+          const unitPrice = Number(group[0].unitPriceSnapshot);
 
-          await tx.orderItem.update({
-            where: { id: orderItem.id },
-            data: {
-              paidQuantity: nextPaidQty,
-              status: nextStatus,
-              version: { increment: 1 },
-            },
-          });
+          for (const orderItem of group) {
+            if (remainingToApply <= 0) break;
 
-          await tx.paymentAllocation.create({
-            data: {
-              paymentId: payment.id,
-              orderItemId: orderItem.id,
-              quantity: applyQty,
-              amount: Number(orderItem.unitPriceSnapshot) * applyQty,
-            },
-          });
+            const availableQty = Math.max(0, orderItem.quantity - orderItem.paidQuantity);
+            const applyQty = Math.min(remainingToApply, availableQty);
+            if (applyQty <= 0) continue;
+
+            const nextPaidQty = orderItem.paidQuantity + applyQty;
+            const nextStatus = nextPaidQty >= orderItem.quantity ? 'PAID' : 'PARTIALLY_PAID';
+
+            await tx.orderItem.update({
+              where: { id: orderItem.id },
+              data: {
+                paidQuantity: nextPaidQty,
+                status: nextStatus,
+                version: { increment: 1 },
+              },
+            });
+
+            await tx.paymentAllocation.create({
+              data: {
+                paymentId: payment.id,
+                orderItemId: orderItem.id,
+                quantity: applyQty,
+                amount: unitPrice * applyQty,
+              },
+            });
+
+            remainingToApply -= applyQty;
+          }
         }
       }
 

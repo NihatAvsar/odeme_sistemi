@@ -11,8 +11,8 @@ import { TableDetailPage } from './admin/TableDetailPage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <TablePage /> },
-  { path: '/table/:tableId', element: <TablePage /> },
-  { path: '/menu/:tableId', element: <CustomerMenuPage /> },
+  { path: '/table/:tableCode', element: <TablePage /> },
+  { path: '/menu/:tableCode', element: <CustomerMenuPage /> },
   { path: '/checkout', element: <CheckoutPage /> },
   { path: '/checkout/success', element: <PaymentSuccessPage /> },
   { path: '/admin/dashboard', element: <DashboardPage /> },
@@ -20,4 +20,5 @@ export const router = createBrowserRouter([
   { path: '/admin/pending-orders', element: <PendingOrdersPage /> },
   { path: '/admin/tables/:tableId', element: <TableDetailPage /> },
   { path: '/admin/menu', element: <AdminMenuPage /> },
+  { path: '/admin/menu/:itemId/edit', element: <AdminMenuPage /> },
 ]);

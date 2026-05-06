@@ -1,5 +1,6 @@
 export type BillItem = {
   id: string;
+  groupKey?: string;
   name: string;
   unitPrice: number;
   quantity: number;

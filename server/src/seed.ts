@@ -21,17 +21,24 @@ async function main() {
     },
   });
 
-  const table = await prisma.table.create({
-    data: {
-      id: 'table-12',
-      restaurantId: restaurant.id,
-      code: '12',
-      name: 'Masa 12',
-      qrToken: 'demo-qr-token-12',
-      status: 'OCCUPIED',
-      capacity: 4,
-    },
-  });
+  const tables = await Promise.all(
+    Array.from({ length: 12 }, (_, index) => {
+      const code = String(index + 1);
+      return prisma.table.create({
+        data: {
+          id: `table-${code}`,
+          restaurantId: restaurant.id,
+          code,
+          name: `Masa ${code}`,
+          qrToken: `demo-qr-token-${code}`,
+          status: code === '12' ? 'OCCUPIED' : 'AVAILABLE',
+          capacity: 4,
+        },
+      });
+    }),
+  );
+
+  const table = tables[11];
 
   const category = await prisma.menuCategory.create({
     data: {

@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getAdminTables, type AdminTableDto } from '../../api/admin';
 import { getPendingOrderRequests, type OrderRequestDto } from '../../api/order-requests';
+import { requireAdminSecret } from '../../api/admin-auth';
 
 export function DashboardPage() {
   const [tables, setTables] = useState<AdminTableDto[]>([]);
   const [pending, setPending] = useState<OrderRequestDto[]>([]);
 
   useEffect(() => {
+    requireAdminSecret();
     void getAdminTables().then(setTables);
     void getPendingOrderRequests().then(setPending);
   }, []);
@@ -21,6 +23,7 @@ export function DashboardPage() {
           <p className="text-sm text-slate-500">Masalar ve bekleyen siparişler</p>
         </div>
         <div className="flex gap-2">
+          <Link to="/admin/menu" className="rounded-xl border px-3 py-2 text-sm font-medium">Menü</Link>
           <Link to="/admin/tables" className="rounded-xl border px-3 py-2 text-sm font-medium">Masalar</Link>
           <Link to="/admin/pending-orders" className="rounded-xl border px-3 py-2 text-sm font-medium">Bekleyen Siparişler</Link>
         </div>

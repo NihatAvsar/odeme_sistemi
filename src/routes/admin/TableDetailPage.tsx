@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getAdminTable, type AdminTableDto } from '../../api/admin';
+import { requireAdminSecret } from '../../api/admin-auth';
+import { getTableStatusLabel, getTableStatusStyles } from './table-status';
 
 export function TableDetailPage() {
   const { tableId = '' } = useParams();
@@ -9,6 +11,7 @@ export function TableDetailPage() {
 
   useEffect(() => {
     if (!tableId) return;
+    requireAdminSecret();
     void getAdminTable(tableId).then(setTable);
   }, [tableId]);
 
@@ -17,6 +20,7 @@ export function TableDetailPage() {
   }
 
   const activeOrder = table.sessions[0]?.orders[0];
+  const statusStyles = getTableStatusStyles(table.status);
 
   return (
     <main className="mx-auto max-w-6xl p-4 md:p-8">
@@ -24,6 +28,9 @@ export function TableDetailPage() {
         <div>
           <h1 className="text-2xl font-semibold">Masa {table.code}</h1>
           <p className="text-sm text-slate-500">{table.name ?? 'İsimsiz'}</p>
+          <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-medium ${statusStyles.badge}`}>
+            {getTableStatusLabel(table.status)}
+          </span>
         </div>
         <Link to="/admin/dashboard" className="rounded-xl border px-3 py-2 text-sm font-medium">Dashboard</Link>
       </div>

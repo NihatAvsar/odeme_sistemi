@@ -1,7 +1,10 @@
 // src/routes/payments/PaymentSuccessPage.tsx
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export function PaymentSuccessPage() {
+  const location = useLocation();
+  const tableId = (location.state as { tableId?: string } | null)?.tableId;
+
   return (
     <main className="mx-auto flex min-h-full max-w-2xl items-center p-4 md:p-8">
       <section className="w-full rounded-3xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-200">
@@ -15,7 +18,7 @@ export function PaymentSuccessPage() {
 
         <div className="mt-6 flex gap-3">
           <Link
-            to="/"
+            to={tableId ? `/table/${tableId}` : '/'}
             className="flex-1 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium"
           >
             Masaya Dön

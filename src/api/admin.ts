@@ -1,7 +1,9 @@
 import { fetchJSON } from './client';
+import { getAdminSecret } from './admin-auth';
 
 export type AdminTableDto = {
   id: string;
+  restaurantId: string;
   code: string;
   name?: string | null;
   status: string;
@@ -31,9 +33,21 @@ export type AdminTableDto = {
 };
 
 export async function getAdminTables() {
-  return fetchJSON<AdminTableDto[]>('/api/admin/tables');
+  return fetchJSON<AdminTableDto[]>('/api/admin/tables', {
+    headers: { 'x-admin-secret': getAdminSecret() },
+  });
+}
+
+export async function createAdminTables(input: { restaurantId?: string; count: number; namePrefix?: string; capacity?: number; startCode?: number }) {
+  return fetchJSON<{ tables: Array<{ id: string; code: string; name: string | null; qrToken: string }> }>('/api/admin/tables', {
+    method: 'POST',
+    headers: { 'x-admin-secret': getAdminSecret() },
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getAdminTable(tableId: string) {
-  return fetchJSON<AdminTableDto>(`/api/admin/tables/${tableId}`);
+  return fetchJSON<AdminTableDto>(`/api/admin/tables/${tableId}`, {
+    headers: { 'x-admin-secret': getAdminSecret() },
+  });
 }
