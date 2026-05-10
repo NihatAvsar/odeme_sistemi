@@ -21,3 +21,33 @@ body {
     linear-gradient(135deg, #fff7ed 0%, #ffffff 42%, #f8fafc 100%);
   background-attachment: fixed;
 }
+
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .qr-print-area,
+  .qr-print-area * {
+    visibility: visible;
+  }
+
+  .qr-print-area {
+    display: grid !important;
+    position: absolute;
+    inset: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18mm;
+    padding: 14mm;
+    background: #ffffff;
+  }
+
+  .table-qr-card {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}

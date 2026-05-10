@@ -36,6 +36,29 @@ enum OrderItemStatus {
   CANCELLED
 }
 
+enum OptionGroupType {
+  SINGLE
+  MULTIPLE
+}
+
+enum FeeType {
+  PERCENT
+  FIXED
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+enum KitchenStatus {
+  NEW
+  PREPARING
+  READY
+  SERVED
+  CANCELLED
+}
+
 enum PaymentStatus {
   INITIATED
   PENDING
@@ -72,6 +95,9 @@ model Restaurant {
   sessions       TableSession[]
   orders         Order[]
   orderRequests  OrderRequest[]
+  settings       RestaurantSettings?
+  promotions     Promotion[]
+  optionGroups   MenuOptionGroup[]
 
   @@map("restaurants")
 }
@@ -150,10 +176,87 @@ model MenuItem {
   restaurant Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   category   MenuCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   orderItems OrderItem[]
+  optionGroups MenuOptionGroup[]
 
   @@index([restaurantId, isActive])
   @@index([categoryId])
   @@map("menu_items")
+}
+
+model MenuOptionGroup {
+  id           String          @id @default(cuid())
+  restaurantId String
+  menuItemId   String
+  name         String
+  type         OptionGroupType @default(SINGLE)
+  isRequired   Boolean         @default(false)
+  minSelect    Int             @default(0)
+  maxSelect    Int             @default(1)
+  sortOrder    Int             @default(0)
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItem   MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  options    MenuOption[]
+
+  @@index([restaurantId, menuItemId, isActive])
+  @@map("menu_option_groups")
+}
+
+model MenuOption {
+  id         String   @id @default(cuid())
+  groupId    String
+  name       String
+  priceDelta Decimal  @default(0) @db.Decimal(10, 2)
+  isDefault  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  group MenuOptionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, isActive, sortOrder])
+  @@map("menu_options")
+}
+
+model RestaurantSettings {
+  id                  String   @id @default(cuid())
+  restaurantId        String   @unique
+  serviceFeeType      FeeType  @default(PERCENT)
+  serviceFeeValue     Decimal  @default(8) @db.Decimal(10, 2)
+  isServiceFeeEnabled Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_settings")
+}
+
+model Promotion {
+  id             String       @id @default(cuid())
+  restaurantId   String
+  name           String
+  code           String?
+  discountType   DiscountType @default(PERCENT)
+  discountValue  Decimal      @db.Decimal(10, 2)
+  minOrderAmount Decimal      @default(0) @db.Decimal(10, 2)
+  startsAt       DateTime?
+  endsAt         DateTime?
+  usageLimit     Int?
+  usedCount      Int          @default(0)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, code])
+  @@index([restaurantId, isActive, code])
+  @@map("promotions")
 }
 
 model Order {
@@ -193,6 +296,7 @@ model OrderRequest {
   requestedBy   String?
   items         Json
   note          String?
+  couponCode    String?
   approvedBy    String?
   rejectedBy    String?
   rejectedReason String?
@@ -217,9 +321,11 @@ model OrderItem {
   quantity          Int
   paidQuantity      Int             @default(0)
   status            OrderItemStatus @default(OPEN)
+  kitchenStatus     KitchenStatus   @default(NEW)
   version           Int             @default(0)
   lineTotal         Decimal         @db.Decimal(10, 2)
   notes             String?
+  selectedOptions   Json?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
@@ -228,6 +334,7 @@ model OrderItem {
   allocations PaymentAllocation[]
 
   @@index([orderId, status])
+  @@index([kitchenStatus])
   @@index([menuItemId])
   @@map("order_items")
 }

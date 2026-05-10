@@ -3,10 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createOrderRequest } from '../../api/order-requests';
 import { getMenu, type MenuCategoryDto } from '../../api/menu';
+import { validateCoupon, type CouponValidationDto } from '../../api/promotions';
 import { getSocket } from '../../lib/socket';
 import { getTableContext } from '../../api/tables';
 
 type CartState = Record<string, number>;
+type CartMeta = Record<string, { menuItemId: string; name: string; price: number; optionIds: string[]; optionLabel?: string }>;
 
 export function MenuPage() {
   const { tableCode = '12' } = useParams();
@@ -15,8 +17,13 @@ export function MenuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartState>({});
+  const [cartMeta, setCartMeta] = useState<CartMeta>({});
+  const [optionItem, setOptionItem] = useState<MenuCategoryDto['items'][number] | null>(null);
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string[]>>({});
   const [requestedBy, setRequestedBy] = useState('');
   const [note, setNote] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponValidation, setCouponValidation] = useState<CouponValidationDto | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -57,33 +64,59 @@ export function MenuPage() {
   }, [tableCode]);
 
   const cartItems = useMemo(() => {
-    const items: Array<{ menuItemId: string; quantity: number; name: string; price: number }> = [];
-    categories.forEach((category) => {
-      category.items.forEach((item) => {
-        const qty = cart[item.id] ?? 0;
-        if (qty > 0) items.push({ menuItemId: item.id, quantity: qty, name: item.name, price: Number(item.price) });
-      });
+    const items: Array<{ menuItemId: string; quantity: number; name: string; price: number; optionIds?: string[]; optionLabel?: string }> = [];
+    Object.entries(cart).forEach(([key, qty]) => {
+      const meta = cartMeta[key];
+      if (qty > 0 && meta) items.push({ ...meta, quantity: qty });
     });
     return items;
-  }, [categories, cart]);
+  }, [cart, cartMeta]);
 
   const total = useMemo(() => {
-    return categories.reduce((sum, category) => {
-      return (
-        sum +
-        category.items.reduce((inner, item) => {
-          const qty = cart[item.id] ?? 0;
-          return inner + qty * Number(item.price);
-        }, 0)
-      );
-    }, 0);
-  }, [categories, cart]);
+    const subtotal = cartItems.reduce((sum, item) => sum + item.quantity * item.price, 0);
+    const discount = couponValidation?.valid ? couponValidation.discount : 0;
+    return Math.max(0, subtotal - discount);
+  }, [cartItems, couponValidation]);
 
-  const changeQty = (itemId: string, delta: number) => {
+  const subtotal = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity * item.price, 0), [cartItems]);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!couponCode.trim() || subtotal <= 0) {
+      setCouponValidation(null);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      void validateCoupon({ tableCode, subtotal, couponCode })
+        .then((result) => mounted && setCouponValidation(result))
+        .catch(() => mounted && setCouponValidation({ valid: false, reason: 'Kupon doğrulanamadı.', discount: 0 }));
+    }, 300);
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeout);
+    };
+  }, [couponCode, subtotal, tableCode]);
+
+  const changeQty = (key: string, delta: number) => {
     setCart((current) => {
-      const next = Math.max(0, (current[itemId] ?? 0) + delta);
-      return { ...current, [itemId]: next };
+      const next = Math.max(0, (current[key] ?? 0) + delta);
+      return { ...current, [key]: next };
     });
+  };
+
+  const addItem = (item: MenuCategoryDto['items'][number], optionIds: string[] = []) => {
+    const selected = (item.optionGroups ?? []).flatMap((group) => group.options.filter((option) => optionIds.includes(option.id)).map((option) => ({ group: group.name, option })));
+    const optionTotal = selected.reduce((sum, entry) => sum + Number(entry.option.priceDelta), 0);
+    const key = `${item.id}:${optionIds.slice().sort().join(',')}`;
+    const optionLabel = selected.map((entry) => `${entry.group}: ${entry.option.name}`).join(', ');
+
+    setCartMeta((current) => ({
+      ...current,
+      [key]: { menuItemId: item.id, name: item.name, price: Number(item.price) + optionTotal, optionIds, optionLabel },
+    }));
+    changeQty(key, 1);
   };
 
   const handleSubmit = async () => {
@@ -104,9 +137,11 @@ export function MenuPage() {
         tableId: tableCode,
         requestedBy,
         note,
-        items: cartItems,
+        couponCode: couponCode || undefined,
+        items: cartItems.map((item) => ({ menuItemId: item.menuItemId, quantity: item.quantity, optionIds: item.optionIds })),
       });
       setCart({});
+      setCartMeta({});
       navigate('/table/' + tableCode);
     } finally {
       setSubmitting(false);
@@ -135,7 +170,8 @@ export function MenuPage() {
               <h2 className="text-lg font-semibold">{category.name}</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {category.items.map((item) => {
-                  const qty = cart[item.id] ?? 0;
+                  const qty = Object.entries(cart).reduce((sum, [key, value]) => (cartMeta[key]?.menuItemId === item.id ? sum + value : sum), 0);
+                  const optionCount = item.optionGroups?.length ?? 0;
                   return (
                     <article key={item.id} className="rounded-2xl border border-slate-200 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -150,13 +186,20 @@ export function MenuPage() {
                         </div>
                       </div>
                       <div className="mt-3 flex items-center gap-3">
-                        <button type="button" onClick={() => changeQty(item.id, -1)} className="h-9 w-9 rounded-full border">
+                        <button type="button" onClick={() => changeQty(Object.keys(cartMeta).find((key) => cartMeta[key].menuItemId === item.id) ?? item.id, -1)} className="h-9 w-9 rounded-full border">
                           -
                         </button>
                         <span className="w-8 text-center font-semibold">{qty}</span>
                         <button
                           type="button"
-                          onClick={() => changeQty(item.id, 1)}
+                          onClick={() => {
+                            if (optionCount > 0) {
+                              setOptionItem(item);
+                              setSelectedOptions({});
+                            } else {
+                              addItem(item);
+                            }
+                          }}
                           disabled={!item.isActive || item.isOutOfStock}
                           className="h-9 w-9 rounded-full border disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -176,8 +219,8 @@ export function MenuPage() {
           <div className="mt-4 space-y-2 text-sm">
             {cartItems.length === 0 ? <p className="text-slate-500">Sepet boş</p> : null}
             {cartItems.map((item) => (
-              <div key={item.menuItemId} className="flex justify-between">
-                <span>{item.name}</span>
+              <div key={`${item.menuItemId}:${item.optionIds?.join(',') ?? ''}`} className="flex justify-between gap-3">
+                <span>{item.name}{item.optionLabel ? <span className="block text-xs text-slate-500">{item.optionLabel}</span> : null}</span>
                 <span>x{item.quantity}</span>
               </div>
             ))}
@@ -191,6 +234,16 @@ export function MenuPage() {
             Not
             <textarea value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" />
           </label>
+          <label className="mt-3 block text-sm">
+            Kupon Kodu
+            <input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="mt-1 w-full rounded-xl border px-3 py-2" />
+          </label>
+
+          {couponCode.trim() ? (
+            <div className={`mt-3 rounded-2xl px-4 py-3 text-sm ${couponValidation?.valid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>
+              {couponValidation?.valid ? `Kupon aktif. İndirim: ${couponValidation.discount.toFixed(2)} TL` : couponValidation?.reason ?? 'Kupon doğrulanıyor...'}
+            </div>
+          ) : null}
 
           <div className="mt-4 flex items-center justify-between border-t pt-4">
             <span className="font-medium">Toplam</span>
@@ -207,6 +260,64 @@ export function MenuPage() {
           </button>
         </aside>
       </div>
+
+      {optionItem ? (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 p-4 sm:items-center sm:justify-center">
+          <div className="w-full max-w-lg rounded-3xl bg-white p-5 shadow-xl">
+            <h2 className="text-lg font-semibold">{optionItem.name} seçenekleri</h2>
+            <div className="mt-4 space-y-4">
+              {(optionItem.optionGroups ?? []).map((group) => (
+                <div key={group.id}>
+                  <p className="font-medium">{group.name}{group.isRequired ? ' *' : ''}</p>
+                  <div className="mt-2 space-y-2">
+                    {group.options.map((option) => {
+                      const checked = (selectedOptions[group.id] ?? []).includes(option.id);
+                      return (
+                        <label key={option.id} className="flex items-center justify-between rounded-2xl border px-3 py-2 text-sm">
+                          <span>{option.name}</span>
+                          <span className="flex items-center gap-2">
+                            {Number(option.priceDelta) !== 0 ? <span>+{Number(option.priceDelta).toFixed(2)} TL</span> : null}
+                            <input
+                              type={group.type === 'SINGLE' ? 'radio' : 'checkbox'}
+                              name={group.id}
+                              checked={checked}
+                              onChange={(event) => {
+                                setSelectedOptions((current) => {
+                                  const currentIds = current[group.id] ?? [];
+                                  const nextIds = group.type === 'SINGLE'
+                                    ? [option.id]
+                                    : event.target.checked
+                                      ? [...currentIds, option.id].slice(0, group.maxSelect)
+                                      : currentIds.filter((id) => id !== option.id);
+                                  return { ...current, [group.id]: nextIds };
+                                });
+                              }}
+                            />
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={() => setOptionItem(null)} className="flex-1 rounded-2xl border px-4 py-3 font-medium">Vazgeç</button>
+              <button
+                type="button"
+                onClick={() => {
+                  const optionIds = Object.values(selectedOptions).flat();
+                  addItem(optionItem, optionIds);
+                  setOptionItem(null);
+                }}
+                className="flex-1 rounded-2xl bg-black px-4 py-3 font-medium text-white"
+              >
+                Sepete Ekle
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

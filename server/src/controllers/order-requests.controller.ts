@@ -6,16 +6,44 @@ import { realtimeGateway } from '../lib/realtime.js';
 type RequestedItem = {
   menuItemId: string;
   quantity: number;
+  optionIds?: string[];
 };
+
+async function getServiceFee(restaurantId: string, subtotal: number) {
+  const settings = await prisma.restaurantSettings.findUnique({ where: { restaurantId } });
+  if (!settings?.isServiceFeeEnabled) return 0;
+  const value = Number(settings.serviceFeeValue);
+  return settings.serviceFeeType === 'FIXED' ? value : subtotal * (value / 100);
+}
+
+async function getDiscount(restaurantId: string, subtotal: number, couponCode?: string | null) {
+  if (!couponCode?.trim()) return 0;
+  const now = new Date();
+  const promotion = await prisma.promotion.findFirst({
+    where: {
+      restaurantId,
+      code: couponCode.trim().toUpperCase(),
+      isActive: true,
+      minOrderAmount: { lte: subtotal },
+      OR: [{ startsAt: null }, { startsAt: { lte: now } }],
+      AND: [{ OR: [{ endsAt: null }, { endsAt: { gte: now } }] }],
+    },
+  });
+  if (!promotion) return 0;
+  if (promotion.usageLimit !== null && promotion.usedCount >= promotion.usageLimit) return 0;
+  const value = Number(promotion.discountValue);
+  return Math.min(subtotal, promotion.discountType === 'FIXED' ? value : subtotal * (value / 100));
+}
 
 export const orderRequestsRouter = Router();
 
 orderRequestsRouter.post('/', async (req, res, next) => {
   try {
-    const { tableId, requestedBy, note, items } = req.body as {
+    const { tableId, requestedBy, note, couponCode, items } = req.body as {
       tableId?: string;
       requestedBy?: string;
       note?: string;
+      couponCode?: string;
       items?: RequestedItem[];
     };
 
@@ -65,6 +93,7 @@ orderRequestsRouter.post('/', async (req, res, next) => {
         tableSessionId: table.sessions[0].id,
         requestedBy,
         note,
+        couponCode: couponCode?.trim().toUpperCase() || null,
         items,
       },
     });
@@ -158,22 +187,47 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
       }
 
       for (const item of parsedItems as RequestedItem[]) {
-        const menuItem = await tx.menuItem.findUnique({ where: { id: item.menuItemId } });
+        const menuItem = await tx.menuItem.findUnique({
+          where: { id: item.menuItemId },
+          include: {
+            optionGroups: {
+              where: { isActive: true },
+              include: { options: { where: { isActive: true } } },
+            },
+          },
+        });
         if (!menuItem) continue;
 
         const quantity = Math.max(1, Math.floor(item.quantity));
+        const selectedOptionIds = new Set(item.optionIds ?? []);
+        const selectedOptions = menuItem.optionGroups.flatMap((group) => {
+          const options = group.options.filter((option) => selectedOptionIds.has(option.id));
+          if (group.isRequired && options.length < group.minSelect) {
+            throw new Error(`Required option missing: ${group.name}`);
+          }
+          if (options.length > group.maxSelect) {
+            throw new Error(`Too many options selected: ${group.name}`);
+          }
+          if (group.type === 'SINGLE' && options.length > 1) {
+            throw new Error(`Only one option can be selected: ${group.name}`);
+          }
+          return options.map((option) => ({ group: group.name, name: option.name, priceDelta: Number(option.priceDelta) }));
+        });
+        const optionTotal = selectedOptions.reduce((sum, option) => sum + option.priceDelta, 0);
+        const unitPrice = Number(menuItem.price) + optionTotal;
+        const optionNotes = selectedOptions.length > 0 ? selectedOptions.map((option) => `${option.group}: ${option.name}`).join(', ') : null;
         const existingLine = await tx.orderItem.findFirst({
           where: {
             orderId: order.id,
             menuItemId: menuItem.id,
-            unitPriceSnapshot: menuItem.price,
-            notes: null,
+            unitPriceSnapshot: unitPrice,
+            notes: optionNotes,
           },
         });
 
         if (existingLine) {
           const nextQuantity = existingLine.quantity + quantity;
-          const nextLineTotal = Number(existingLine.lineTotal) + Number(menuItem.price) * quantity;
+          const nextLineTotal = Number(existingLine.lineTotal) + unitPrice * quantity;
           const nextPaidQuantity = Math.min(existingLine.paidQuantity, nextQuantity);
 
           await tx.orderItem.update({
@@ -191,10 +245,12 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
             data: {
               orderId: order.id,
               menuItemId: menuItem.id,
-              nameSnapshot: menuItem.name,
-              unitPriceSnapshot: menuItem.price,
+              nameSnapshot: selectedOptions.length > 0 ? `${menuItem.name} (${selectedOptions.map((option) => option.name).join(', ')})` : menuItem.name,
+              unitPriceSnapshot: unitPrice,
               quantity,
-              lineTotal: Number(menuItem.price) * quantity,
+              lineTotal: unitPrice * quantity,
+              notes: optionNotes,
+              selectedOptions: selectedOptions as never,
             },
           });
         }
@@ -202,13 +258,15 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
 
       const updatedItems = await tx.orderItem.findMany({ where: { orderId: order.id } });
       const subtotal = updatedItems.reduce((sum, item) => sum + Number(item.lineTotal), 0);
-      const serviceFee = subtotal * 0.08;
-      const total = subtotal + serviceFee;
+      const discount = await getDiscount(request.restaurantId, subtotal, request.couponCode);
+      const serviceFee = await getServiceFee(request.restaurantId, subtotal);
+      const total = Math.max(0, subtotal + serviceFee - discount);
 
       const updatedOrder = await tx.order.update({
         where: { id: order.id },
         data: {
           subtotal,
+          discount,
           serviceFee,
           total,
           remaining: total,
@@ -243,6 +301,10 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
       tableId: request.tableSession.table.id,
       orderRequestId: request.id,
       status: 'APPROVED',
+    });
+    realtimeGateway.emitToRestaurant(request.restaurantId, 'kitchen.ticket.created', {
+      restaurantId: request.restaurantId,
+      orderId: approvedOrder.id,
     });
 
     res.json(approvedOrder);

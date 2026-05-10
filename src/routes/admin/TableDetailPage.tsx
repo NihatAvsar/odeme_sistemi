@@ -1,8 +1,10 @@
 // src/routes/admin/TableDetailPage.tsx
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { TableQrCard } from '../../components/qr/TableQrCard';
 import { cashSettleAdminTable, getAdminTable, type AdminTableDto } from '../../api/admin';
 import { requireAdminSecret } from '../../api/admin-auth';
+import { getTableQrUrl } from '../../functions/qr';
 import { adminButtonClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass, adminStatCardClass, getAdminSummaryToneClasses } from './admin-theme';
 import { getTableStatusLabel, getTableStatusStyles } from './table-status';
 
@@ -105,6 +107,19 @@ export function TableDetailPage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className={adminSectionClass}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Masa QR Kodu</h2>
+            <p className="mt-1 text-sm text-slate-600">Bu QR kod müşteriyi doğrudan masa adisyonuna yönlendirir.</p>
+          </div>
+          <Link to={`/table/${table.code}`} className={adminSecondaryButtonClass}>Müşteri Ekranını Aç</Link>
+        </div>
+        <div className="mt-5 max-w-sm">
+          <TableQrCard tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.code)} />
         </div>
       </section>
     </main>

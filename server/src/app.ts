@@ -7,6 +7,8 @@ import { paymentsRouter } from './controllers/payments.controller.js';
 import { webhookRouter } from './controllers/webhook.controller.js';
 import { ordersRouter } from './controllers/orders.controller.js';
 import { tablesRouter } from './controllers/tables.controller.js';
+import { kitchenRouter } from './controllers/kitchen.controller.js';
+import { promotionsRouter } from './controllers/promotions.controller.js';
 import { env } from './config/env.js';
 
 export function createApp() {
@@ -25,6 +27,8 @@ export function createApp() {
   app.use('/api/tables', tablesRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api/admin/kitchen', kitchenRouter);
+  app.use('/api/promotions', promotionsRouter);
   app.use('/api/webhooks', webhookRouter);
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -8,7 +8,11 @@ adminMenuRouter.get('/', async (_req, res, next) => {
   try {
     const items = await prisma.menuItem.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { category: true, restaurant: true },
+      include: {
+        category: true,
+        restaurant: true,
+        optionGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { orderBy: { sortOrder: 'asc' } } } },
+      },
     });
 
     res.json(items);
@@ -25,6 +29,76 @@ adminMenuRouter.get('/categories', async (_req, res, next) => {
     });
 
     res.json(categories);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminMenuRouter.put('/:itemId/options', async (req, res, next) => {
+  try {
+    const { groups = [] } = req.body as {
+      groups?: Array<{
+        name?: string;
+        type?: 'SINGLE' | 'MULTIPLE';
+        isRequired?: boolean;
+        minSelect?: number;
+        maxSelect?: number;
+        sortOrder?: number;
+        isActive?: boolean;
+        options?: Array<{
+          name?: string;
+          priceDelta?: number;
+          isDefault?: boolean;
+          isActive?: boolean;
+          sortOrder?: number;
+        }>;
+      }>;
+    };
+
+    const item = await prisma.menuItem.findUnique({ where: { id: req.params.itemId } });
+    if (!item) {
+      res.status(404).json({ message: 'Menu item not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.menuOptionGroup.deleteMany({ where: { menuItemId: item.id } });
+
+      for (const [groupIndex, group] of groups.entries()) {
+        if (!group.name?.trim()) continue;
+        await tx.menuOptionGroup.create({
+          data: {
+            restaurantId: item.restaurantId,
+            menuItemId: item.id,
+            name: group.name.trim(),
+            type: group.type ?? 'SINGLE',
+            isRequired: Boolean(group.isRequired),
+            minSelect: Math.max(0, Math.floor(group.minSelect ?? 0)),
+            maxSelect: Math.max(1, Math.floor(group.maxSelect ?? (group.type === 'MULTIPLE' ? 99 : 1))),
+            sortOrder: group.sortOrder ?? groupIndex,
+            isActive: group.isActive ?? true,
+            options: {
+              create: (group.options ?? [])
+                .filter((option) => option.name?.trim())
+                .map((option, optionIndex) => ({
+                  name: option.name!.trim(),
+                  priceDelta: Number(option.priceDelta ?? 0),
+                  isDefault: Boolean(option.isDefault),
+                  isActive: option.isActive ?? true,
+                  sortOrder: option.sortOrder ?? optionIndex,
+                })),
+            },
+          },
+        });
+      }
+    });
+
+    realtimeGateway.emitToRestaurant(item.restaurantId, 'menu.updated', { restaurantId: item.restaurantId });
+    const updated = await prisma.menuItem.findUnique({
+      where: { id: item.id },
+      include: { optionGroups: { orderBy: { sortOrder: 'asc' }, include: { options: { orderBy: { sortOrder: 'asc' } } } } },
+    });
+    res.json(updated);
   } catch (error) {
     next(error);
   }

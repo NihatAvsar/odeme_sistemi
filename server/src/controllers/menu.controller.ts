@@ -48,6 +48,16 @@ menuRouter.get('/:tableCode', async (req, res, next) => {
             imageUrl: true,
             isActive: true,
             isOutOfStock: true,
+            optionGroups: {
+              where: { isActive: true },
+              orderBy: { sortOrder: 'asc' },
+              include: {
+                options: {
+                  where: { isActive: true },
+                  orderBy: { sortOrder: 'asc' },
+                },
+              },
+            },
           },
         },
       },

@@ -1,8 +1,10 @@
 // src/routes/admin/TablesPage.tsx
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { TableQrCard } from '../../components/qr/TableQrCard';
 import { createAdminTables, getAdminTables, type AdminTableDto } from '../../api/admin';
 import { requireAdminSecret } from '../../api/admin-auth';
+import { downloadCanvasPng, getTableQrUrl } from '../../functions/qr';
 import { adminButtonClass, adminCardClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass, adminStatCardClass, getAdminSummaryToneClasses } from './admin-theme';
 import { getTableStatusLabel, getTableStatusStyles } from './table-status';
 
@@ -12,6 +14,8 @@ export function TablesPage() {
   const [count, setCount] = useState('1');
   const [startCode, setStartCode] = useState('');
   const [creating, setCreating] = useState(false);
+  const [visibleQrTableId, setVisibleQrTableId] = useState<string | null>(null);
+  const [printTables, setPrintTables] = useState<AdminTableDto[]>([]);
 
   useEffect(() => {
     requireAdminSecret();
@@ -37,6 +41,25 @@ export function TablesPage() {
     return { total: tables.length, occupied, cleaning, available, reserved };
   }, [tables]);
 
+  useEffect(() => {
+    if (printTables.length === 0) return;
+
+    const timeout = window.setTimeout(() => window.print(), 100);
+    const afterPrint = () => setPrintTables([]);
+    window.addEventListener('afterprint', afterPrint);
+
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('afterprint', afterPrint);
+    };
+  }, [printTables]);
+
+  const downloadQr = (table: AdminTableDto) => {
+    const canvas = document.getElementById(`qr-download-${table.id}`) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    downloadCanvasPng(canvas, `masa-${table.code}-qr.png`);
+  };
+
   return (
     <main className={adminPageClass}>
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -48,7 +71,28 @@ export function TablesPage() {
         <div className="flex flex-wrap gap-2">
           <Link to="/admin/menu" className={adminSecondaryButtonClass}>Menü</Link>
           <Link to="/admin/dashboard" className={adminSecondaryButtonClass}>Dashboard</Link>
+          <button type="button" onClick={() => setPrintTables(sortedTables)} className={adminButtonClass}>
+            Tüm QR Kodları Yazdır
+          </button>
         </div>
+      </div>
+
+      <div className="hidden">
+        {sortedTables.map((table) => (
+          <TableQrCard
+            key={table.id}
+            tableCode={table.code}
+            tableName={table.name}
+            url={getTableQrUrl(table.code)}
+            canvasId={`qr-download-${table.id}`}
+          />
+        ))}
+      </div>
+
+      <div className="qr-print-area hidden">
+        {printTables.map((table) => (
+          <TableQrCard key={table.id} tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.code)} />
+        ))}
       </div>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -120,16 +164,30 @@ export function TablesPage() {
               <button
                 type="button"
                 onClick={async () => {
-                  await navigator.clipboard.writeText(`${window.location.origin}/table/${table.code}`);
+                  await navigator.clipboard.writeText(getTableQrUrl(table.code));
                 }}
                 className={adminSecondaryButtonClass}
               >
                 QR Adresi Kopyala
               </button>
+              <button type="button" onClick={() => setVisibleQrTableId((current) => (current === table.id ? null : table.id))} className={adminSecondaryButtonClass}>
+                QR Görüntüle
+              </button>
+              <button type="button" onClick={() => downloadQr(table)} className={adminSecondaryButtonClass}>
+                QR İndir
+              </button>
+              <button type="button" onClick={() => setPrintTables([table])} className={adminSecondaryButtonClass}>
+                QR Yazdır
+              </button>
               <Link to={`/table/${table.code}`} className={adminSecondaryButtonClass}>
                 Müşteri Ekranı
               </Link>
             </div>
+            {visibleQrTableId === table.id ? (
+              <div className="mt-5">
+                <TableQrCard tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.code)} />
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

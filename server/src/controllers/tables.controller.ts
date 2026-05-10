@@ -71,9 +71,13 @@ tablesRouter.get('/:tableCode', async (req, res, next) => {
     res.json({
       table,
       session: activeSession,
-      activeOrder: activeOrder
+        activeOrder: activeOrder
         ? {
             ...activeOrder,
+            discount: Number(activeOrder.discount),
+            serviceFee: Number(activeOrder.serviceFee),
+            total: Number(activeOrder.total),
+            remaining: Number(activeOrder.remaining),
             items: groupOrderItems(activeOrder.items),
           }
         : null,

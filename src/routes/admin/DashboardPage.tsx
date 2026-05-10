@@ -25,6 +25,8 @@ export function DashboardPage() {
         <div className="flex gap-2">
           <Link to="/admin/menu" className="rounded-xl border px-3 py-2 text-sm font-medium">Menü</Link>
           <Link to="/admin/tables" className="rounded-xl border px-3 py-2 text-sm font-medium">Masalar</Link>
+          <Link to="/admin/kitchen" className="rounded-xl border px-3 py-2 text-sm font-medium">Mutfak</Link>
+          <Link to="/admin/settings" className="rounded-xl border px-3 py-2 text-sm font-medium">Ayarlar</Link>
           <Link to="/admin/pending-orders" className="rounded-xl border px-3 py-2 text-sm font-medium">Bekleyen Siparişler</Link>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { getAdminSecret } from './admin-auth';
 export type RequestedItemDto = {
   menuItemId: string;
   quantity: number;
+  optionIds?: string[];
 };
 
 export type OrderRequestDto = {
@@ -19,6 +20,7 @@ export async function createOrderRequest(input: {
   tableId: string;
   requestedBy?: string;
   note?: string;
+  couponCode?: string;
   items: RequestedItemDto[];
 }) {
   return fetchJSON<OrderRequestDto>('/api/order-requests', {

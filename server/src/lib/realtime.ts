@@ -9,6 +9,8 @@ export type RealtimeEvents = {
   'order-request.created': (payload: { tableId: string; orderRequestId: string }) => void;
   'order-request.updated': (payload: { tableId: string; orderRequestId: string; status: string }) => void;
   'menu.updated': (payload: { restaurantId: string }) => void;
+  'kitchen.ticket.created': (payload: { restaurantId: string; orderId: string }) => void;
+  'kitchen.ticket.updated': (payload: { restaurantId: string; orderItemId: string; status: string }) => void;
 };
 
 export class RealtimeGateway {

@@ -177,3 +177,118 @@ adminRouter.get('/pending-orders', async (_req, res, next) => {
     next(error);
   }
 });
+
+adminRouter.get('/settings', async (_req, res, next) => {
+  try {
+    const restaurant = await prisma.restaurant.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!restaurant) {
+      res.status(404).json({ message: 'Restaurant not found' });
+      return;
+    }
+
+    const settings = await prisma.restaurantSettings.upsert({
+      where: { restaurantId: restaurant.id },
+      create: { restaurantId: restaurant.id },
+      update: {},
+    });
+
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.patch('/settings', async (req, res, next) => {
+  try {
+    const { serviceFeeType, serviceFeeValue, isServiceFeeEnabled } = req.body as {
+      serviceFeeType?: 'PERCENT' | 'FIXED';
+      serviceFeeValue?: number;
+      isServiceFeeEnabled?: boolean;
+    };
+    const restaurant = await prisma.restaurant.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!restaurant) {
+      res.status(404).json({ message: 'Restaurant not found' });
+      return;
+    }
+
+    const settings = await prisma.restaurantSettings.upsert({
+      where: { restaurantId: restaurant.id },
+      create: {
+        restaurantId: restaurant.id,
+        serviceFeeType: serviceFeeType ?? 'PERCENT',
+        serviceFeeValue: serviceFeeValue ?? 8,
+        isServiceFeeEnabled: isServiceFeeEnabled ?? true,
+      },
+      update: {
+        ...(serviceFeeType ? { serviceFeeType } : {}),
+        ...(serviceFeeValue !== undefined ? { serviceFeeValue } : {}),
+        ...(isServiceFeeEnabled !== undefined ? { isServiceFeeEnabled } : {}),
+      },
+    });
+
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.get('/promotions', async (_req, res, next) => {
+  try {
+    const promotions = await prisma.promotion.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(promotions);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.post('/promotions', async (req, res, next) => {
+  try {
+    const { name, code, discountType = 'PERCENT', discountValue, minOrderAmount = 0, startsAt, endsAt, usageLimit, isActive = true } = req.body as {
+      name?: string;
+      code?: string;
+      discountType?: 'PERCENT' | 'FIXED';
+      discountValue?: number;
+      minOrderAmount?: number;
+      startsAt?: string;
+      endsAt?: string;
+      usageLimit?: number;
+      isActive?: boolean;
+    };
+    const restaurant = await prisma.restaurant.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (!restaurant || !name || discountValue === undefined) {
+      res.status(400).json({ message: 'Invalid promotion payload' });
+      return;
+    }
+
+    const promotion = await prisma.promotion.create({
+      data: {
+        restaurantId: restaurant.id,
+        name,
+        code: code?.trim().toUpperCase() || null,
+        discountType,
+        discountValue,
+        minOrderAmount,
+        startsAt: startsAt ? new Date(startsAt) : null,
+        endsAt: endsAt ? new Date(endsAt) : null,
+        usageLimit,
+        isActive,
+      },
+    });
+
+    res.status(201).json(promotion);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.patch('/promotions/:promotionId', async (req, res, next) => {
+  try {
+    const promotion = await prisma.promotion.update({
+      where: { id: req.params.promotionId },
+      data: req.body,
+    });
+    res.json(promotion);
+  } catch (error) {
+    next(error);
+  }
+});

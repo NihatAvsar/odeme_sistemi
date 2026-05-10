@@ -9,6 +9,7 @@ export type ApiOrderItem = {
   quantity: number;
   paidQuantity: number;
   status: 'OPEN' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED';
+  kitchenStatus?: 'NEW' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
   notes?: string | null;
   lineTotal?: string | number;
 };
@@ -16,6 +17,7 @@ export type ApiOrderItem = {
 export type ApiOrder = {
   id: string;
   subtotal: string | number;
+  discount: string | number;
   serviceFee: string | number;
   total: string | number;
   remaining: string | number;

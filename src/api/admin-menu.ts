@@ -12,6 +12,19 @@ export type AdminMenuItemDto = {
   isActive: boolean;
   isOutOfStock: boolean;
   updatedBy?: string | null;
+  optionGroups?: AdminMenuOptionGroupDto[];
+};
+
+export type AdminMenuOptionGroupDto = {
+  id?: string;
+  name: string;
+  type: 'SINGLE' | 'MULTIPLE';
+  isRequired: boolean;
+  minSelect: number;
+  maxSelect: number;
+  sortOrder?: number;
+  isActive?: boolean;
+  options: Array<{ id?: string; name: string; priceDelta: number | string; isDefault?: boolean; isActive?: boolean; sortOrder?: number }>;
 };
 
 export type AdminMenuCategoryDto = {
@@ -61,5 +74,13 @@ export async function deleteAdminMenuItem(itemId: string, updatedBy?: string) {
     method: 'DELETE',
     headers: { 'x-admin-secret': getAdminSecret() },
     body: JSON.stringify({ updatedBy }),
+  });
+}
+
+export async function updateAdminMenuOptions(itemId: string, groups: AdminMenuOptionGroupDto[]) {
+  return fetchJSON<AdminMenuItemDto>(`/api/admin/menu/${itemId}/options`, {
+    method: 'PUT',
+    headers: { 'x-admin-secret': getAdminSecret() },
+    body: JSON.stringify({ groups }),
   });
 }

@@ -8,6 +8,8 @@ import { DashboardPage } from './admin/DashboardPage';
 import { TablesPage } from './admin/TablesPage';
 import { PendingOrdersPage } from './admin/PendingOrdersPage';
 import { TableDetailPage } from './admin/TableDetailPage';
+import { SettingsPage } from './admin/SettingsPage';
+import { KitchenPage } from './admin/KitchenPage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <TablePage /> },
@@ -18,6 +20,8 @@ export const router = createBrowserRouter([
   { path: '/admin/dashboard', element: <DashboardPage /> },
   { path: '/admin/tables', element: <TablesPage /> },
   { path: '/admin/pending-orders', element: <PendingOrdersPage /> },
+  { path: '/admin/settings', element: <SettingsPage /> },
+  { path: '/admin/kitchen', element: <KitchenPage /> },
   { path: '/admin/tables/:tableId', element: <TableDetailPage /> },
   { path: '/admin/menu', element: <AdminMenuPage /> },
   { path: '/admin/menu/:itemId/edit', element: <AdminMenuPage /> },

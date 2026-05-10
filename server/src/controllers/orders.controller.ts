@@ -22,6 +22,10 @@ ordersRouter.get('/:orderId', async (req, res, next) => {
 
     res.json({
       ...order,
+      discount: Number(order.discount),
+      serviceFee: Number(order.serviceFee),
+      total: Number(order.total),
+      remaining: Number(order.remaining),
       items: groupOrderItems(order.items),
     });
   } catch (error) {
