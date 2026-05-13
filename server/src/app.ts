@@ -9,6 +9,7 @@ import { ordersRouter } from './controllers/orders.controller.js';
 import { tablesRouter } from './controllers/tables.controller.js';
 import { kitchenRouter } from './controllers/kitchen.controller.js';
 import { promotionsRouter } from './controllers/promotions.controller.js';
+import { tableActionsRouter } from './controllers/table-actions.controller.js';
 import { env } from './config/env.js';
 
 export function createApp() {
@@ -25,6 +26,7 @@ export function createApp() {
   app.use('/api/menu', menuRouter);
   app.use('/api/order-requests', orderRequestsRouter);
   app.use('/api/tables', tablesRouter);
+  app.use('/api/tables', tableActionsRouter);
   app.use('/api/admin', adminRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/admin/kitchen', kitchenRouter);

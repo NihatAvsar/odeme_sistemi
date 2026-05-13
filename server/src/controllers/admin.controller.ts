@@ -5,12 +5,16 @@ import { adminMenuRouter } from './admin-menu.controller.js';
 import { groupOrderItems } from '../lib/order-presenter.js';
 import { paymentService } from '../services/payment.service.js';
 import { releaseDueTables } from '../services/table-release.service.js';
+import { reportsRouter } from './reports.controller.js';
+import { adminTableActionsRouter } from './table-actions.controller.js';
 
 export const adminRouter = Router();
 
 adminRouter.use(requireAdminAuth);
 
 adminRouter.use('/menu', adminMenuRouter);
+adminRouter.use('/reports', reportsRouter);
+adminRouter.use('/table-actions', adminTableActionsRouter);
 
 adminRouter.post('/tables', async (req, res, next) => {
   try {

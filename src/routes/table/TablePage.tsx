@@ -8,6 +8,7 @@ import { formatMoney } from '../../functions/currency';
 import { calculateOrderTotals, calculateSelectedAmount } from '../../functions/billing';
 import type { BillItem, SelectedItem } from '../../types/billing';
 import type { ApiOrder } from '../../api/orders';
+import { createTableAction, type TableActionType } from '../../api/table-actions';
 
 const DEMO_TABLE_CODE = '12';
 
@@ -21,6 +22,11 @@ export function TablePage() {
   const [tableInfo, setTableInfo] = useState<{ id: string; code: string; restaurantId: string } | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [activeOrder, setActiveOrder] = useState<ApiOrder | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSending, setActionSending] = useState<TableActionType | null>(null);
+  const [sentActionTypes, setSentActionTypes] = useState<TableActionType[]>([]);
+  const [noteText, setNoteText] = useState('');
 
   const totals = useMemo(() => {
     if (activeOrder) {
@@ -92,15 +98,20 @@ export function TablePage() {
     const onOrderUpdated = () => refreshContext();
     const onPaymentUpdated = () => refreshContext();
     const onKitchenUpdated = () => refreshContext();
+    const onTableActionUpdated = () => {
+      setActionMessage('Masa isteğiniz restoran ekibi tarafından güncellendi.');
+    };
 
     socket.on('order.updated', onOrderUpdated);
     socket.on('payment.updated', onPaymentUpdated);
     socket.on('kitchen.ticket.updated', onKitchenUpdated);
+    socket.on('table.action.updated', onTableActionUpdated);
 
     return () => {
       socket.off('order.updated', onOrderUpdated);
       socket.off('payment.updated', onPaymentUpdated);
       socket.off('kitchen.ticket.updated', onKitchenUpdated);
+      socket.off('table.action.updated', onTableActionUpdated);
       socket.disconnect();
     };
   }, [tableCode, tableInfo?.id]);
@@ -112,6 +123,29 @@ export function TablePage() {
     socket.connect();
     socket.emit('order:join', activeOrderId);
   }, [tableInfo?.id, activeOrderId]);
+
+  const submitTableAction = async (type: TableActionType, message?: string) => {
+    setActionSending(type);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      await createTableAction(tableCode, { type, message });
+      setSentActionTypes((current) => (current.includes(type) ? current : [...current, type]));
+      setActionMessage(actionLabel(type) + ' isteğiniz iletildi.');
+      if (type === 'SEND_NOTE') setNoteText('');
+    } catch (err) {
+      const messageText = err instanceof Error ? err.message : 'İstek gönderilemedi';
+      if (messageText.includes('zaten')) {
+        setSentActionTypes((current) => (current.includes(type) ? current : [...current, type]));
+        setActionMessage('Bu istek zaten iletildi.');
+      } else {
+        setActionError(messageText);
+      }
+    } finally {
+      setActionSending(null);
+    }
+  };
 
   return (
     <main className="mx-auto flex min-h-full max-w-5xl flex-col gap-6 p-4 md:p-8">
@@ -137,6 +171,54 @@ export function TablePage() {
 
         {loading ? <p className="mt-4 text-sm text-slate-500">Adisyon yukleniyor...</p> : null}
         {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
+      </section>
+
+      <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Masa İstekleri</h2>
+            <p className="text-sm text-slate-500">Garson çağırabilir, hesap isteyebilir veya kısa not gönderebilirsiniz.</p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            disabled={actionSending === 'CALL_WAITER' || sentActionTypes.includes('CALL_WAITER')}
+            onClick={() => void submitTableAction('CALL_WAITER')}
+            className="rounded-2xl bg-brand-700 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {sentActionTypes.includes('CALL_WAITER') ? 'Garson çağrıldı' : actionSending === 'CALL_WAITER' ? 'Gönderiliyor...' : 'Garson Çağır'}
+          </button>
+          <button
+            type="button"
+            disabled={actionSending === 'REQUEST_BILL' || sentActionTypes.includes('REQUEST_BILL')}
+            onClick={() => void submitTableAction('REQUEST_BILL')}
+            className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {sentActionTypes.includes('REQUEST_BILL') ? 'Hesap istendi' : actionSending === 'REQUEST_BILL' ? 'Gönderiliyor...' : 'Hesap İste'}
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="Restorana not gönder"
+            className="min-h-12 flex-1 rounded-2xl border px-4 py-3 text-sm"
+          />
+          <button
+            type="button"
+            disabled={actionSending === 'SEND_NOTE' || !noteText.trim() || sentActionTypes.includes('SEND_NOTE')}
+            onClick={() => void submitTableAction('SEND_NOTE', noteText)}
+            className="rounded-2xl border border-slate-900 px-4 py-3 text-sm font-semibold text-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {sentActionTypes.includes('SEND_NOTE') ? 'Not gönderildi' : actionSending === 'SEND_NOTE' ? 'Gönderiliyor...' : 'Not Gönder'}
+          </button>
+        </div>
+
+        {actionMessage ? <p className="mt-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{actionMessage}</p> : null}
+        {actionError ? <p className="mt-3 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{actionError}</p> : null}
       </section>
 
       <ItemSplitSelector
@@ -180,6 +262,15 @@ export function TablePage() {
       ) : null}
     </main>
   );
+}
+
+function actionLabel(type: TableActionType) {
+  switch (type) {
+    case 'CALL_WAITER': return 'Garson çağırma';
+    case 'REQUEST_BILL': return 'Hesap isteme';
+    case 'SEND_NOTE': return 'Not gönderme';
+    default: return 'Masa';
+  }
 }
 
 function kitchenLabel(status: string) {

@@ -82,6 +82,19 @@ enum OrderRequestStatus {
   CANCELLED
 }
 
+enum TableActionType {
+  CALL_WAITER
+  REQUEST_BILL
+  SEND_NOTE
+}
+
+enum TableActionStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  CANCELLED
+}
+
 model Restaurant {
   id             String         @id @default(cuid())
   name           String
@@ -98,6 +111,7 @@ model Restaurant {
   settings       RestaurantSettings?
   promotions     Promotion[]
   optionGroups   MenuOptionGroup[]
+  tableActions   TableAction[]
 
   @@map("restaurants")
 }
@@ -116,6 +130,7 @@ model Table {
 
   restaurant Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   sessions   TableSession[]
+  actions    TableAction[]
 
   @@unique([restaurantId, code])
   @@index([restaurantId, status])
@@ -136,6 +151,7 @@ model TableSession {
   table      Table      @relation(fields: [tableId], references: [id], onDelete: Cascade)
   orders     Order[]
   requests   OrderRequest[]
+  actions    TableAction[]
 
   @@index([restaurantId, tableId, status])
   @@map("table_sessions")
@@ -310,6 +326,28 @@ model OrderRequest {
   @@index([restaurantId, status, createdAt])
   @@index([tableSessionId, status])
   @@map("order_requests")
+}
+
+model TableAction {
+  id           String            @id @default(cuid())
+  restaurantId String
+  tableId      String
+  sessionId    String?
+  type         TableActionType
+  status       TableActionStatus @default(OPEN)
+  message      String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  resolvedAt   DateTime?
+  resolvedBy   String?
+
+  restaurant Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table      Table         @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  session    TableSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, status, createdAt])
+  @@index([tableId, status])
+  @@map("table_actions")
 }
 
 model OrderItem {

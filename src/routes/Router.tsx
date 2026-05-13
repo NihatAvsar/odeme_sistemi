@@ -10,6 +10,8 @@ import { PendingOrdersPage } from './admin/PendingOrdersPage';
 import { TableDetailPage } from './admin/TableDetailPage';
 import { SettingsPage } from './admin/SettingsPage';
 import { KitchenPage } from './admin/KitchenPage';
+import { ReportsPage } from './admin/ReportsPage';
+import { TableActionsPage } from './admin/TableActionsPage';
 
 export const router = createBrowserRouter([
   { path: '/', element: <TablePage /> },
@@ -22,6 +24,8 @@ export const router = createBrowserRouter([
   { path: '/admin/pending-orders', element: <PendingOrdersPage /> },
   { path: '/admin/settings', element: <SettingsPage /> },
   { path: '/admin/kitchen', element: <KitchenPage /> },
+  { path: '/admin/reports', element: <ReportsPage /> },
+  { path: '/admin/table-actions', element: <TableActionsPage /> },
   { path: '/admin/tables/:tableId', element: <TableDetailPage /> },
   { path: '/admin/menu', element: <AdminMenuPage /> },
   { path: '/admin/menu/:itemId/edit', element: <AdminMenuPage /> },
