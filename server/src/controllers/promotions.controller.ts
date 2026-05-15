@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { validate } from '../middleware/validate.js';
+import { promotionValidateBody } from '../schemas/api.js';
 
 export const promotionsRouter = Router();
 
@@ -7,7 +9,7 @@ function normalizeCode(code: string) {
   return code.trim().toUpperCase();
 }
 
-promotionsRouter.post('/validate', async (req, res, next) => {
+promotionsRouter.post('/validate', validate({ body: promotionValidateBody }), async (req, res, next) => {
   try {
     const { tableCode, subtotal, couponCode } = req.body as { tableCode?: string; subtotal?: number; couponCode?: string };
     if (!tableCode || !couponCode) {

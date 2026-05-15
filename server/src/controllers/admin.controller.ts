@@ -7,6 +7,10 @@ import { paymentService } from '../services/payment.service.js';
 import { releaseDueTables } from '../services/table-release.service.js';
 import { reportsRouter } from './reports.controller.js';
 import { adminTableActionsRouter } from './table-actions.controller.js';
+import { getAuditRequestContext, writeAuditLog } from '../lib/audit.js';
+import { validate } from '../middleware/validate.js';
+import { params, promotionCreateBody, promotionUpdateBody, settingsUpdateBody, tableStatusUpdateBody } from '../schemas/api.js';
+import { getEffectiveTableStatus } from '../lib/table-status.js';
 
 export const adminRouter = Router();
 
@@ -66,6 +70,14 @@ adminRouter.post('/tables', async (req, res, next) => {
       candidate += 1;
     }
 
+    await writeAuditLog({
+      restaurantId: resolvedRestaurantId,
+      action: 'table.create',
+      entityType: 'Table',
+      payload: { count: tables.length, tableIds: tables.map((table) => table.id), codes: tables.map((table) => table.code) },
+      ...getAuditRequestContext(req),
+    });
+
     res.status(201).json({ tables });
   } catch (error) {
     if ((error as { code?: string }).code === 'P2002') {
@@ -76,10 +88,71 @@ adminRouter.post('/tables', async (req, res, next) => {
   }
 });
 
-adminRouter.post('/tables/:tableId/cash-settle', async (req, res, next) => {
+adminRouter.post('/tables/:tableId/cash-settle', validate({ params: params.tableId }), async (req, res, next) => {
   try {
-    const result = await paymentService.cashSettleTable(req.params.tableId, 'Kasada Ödendi');
+    const result = await paymentService.cashSettleTable(String(req.params.tableId), 'Kasada Ödendi', getAuditRequestContext(req));
     res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.patch('/tables/:tableId/status', validate({ params: params.tableId, body: tableStatusUpdateBody }), async (req, res, next) => {
+  try {
+    const tableId = String(req.params.tableId);
+    const { status } = req.body as { status: 'AVAILABLE' | 'RESERVED' };
+    const table = await prisma.table.findUnique({
+      where: { id: tableId },
+      include: {
+        sessions: {
+          where: { status: 'OPEN' },
+          take: 1,
+          orderBy: { openedAt: 'desc' },
+          include: {
+            orders: {
+              where: { status: { in: ['OPEN', 'PARTIALLY_PAID'] } },
+              take: 1,
+            },
+            requests: {
+              where: { status: 'PENDING_APPROVAL' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    if (!table) {
+      res.status(404).json({ message: 'Table not found' });
+      return;
+    }
+
+    const effectiveStatus = getEffectiveTableStatus(table);
+    if (status === 'RESERVED' && effectiveStatus !== 'AVAILABLE' && effectiveStatus !== 'RESERVED') {
+      res.status(409).json({ message: 'Aktif veya bekleyen siparişi olan masa rezerve edilemez.' });
+      return;
+    }
+
+    if (status === 'AVAILABLE' && effectiveStatus !== 'RESERVED' && effectiveStatus !== 'AVAILABLE') {
+      res.status(409).json({ message: 'Bu masa şu anda boşa alınamaz.' });
+      return;
+    }
+
+    const updated = await prisma.table.update({
+      where: { id: tableId },
+      data: { status, releaseAt: null },
+    });
+
+    await writeAuditLog({
+      restaurantId: updated.restaurantId,
+      action: 'table.status_update',
+      entityType: 'Table',
+      entityId: updated.id,
+      payload: { before: table.status, after: status },
+      ...getAuditRequestContext(req),
+    });
+
+    res.json({ ...updated, status: getEffectiveTableStatus({ ...updated, sessions: table.sessions }) });
   } catch (error) {
     next(error);
   }
@@ -101,13 +174,18 @@ adminRouter.get('/tables', async (_req, res, next) => {
               take: 1,
               include: { items: true },
             },
+            requests: {
+              where: { status: 'PENDING_APPROVAL' },
+              take: 1,
+              orderBy: { createdAt: 'desc' },
+            },
           },
         },
       },
       orderBy: { code: 'asc' },
     });
 
-    res.json(tables);
+    res.json(tables.map((table) => ({ ...table, status: getEffectiveTableStatus(table) })));
   } catch (error) {
     next(error);
   }
@@ -147,6 +225,7 @@ adminRouter.get('/tables/:tableId', async (req, res, next) => {
     const activeOrder = table.sessions[0]?.orders[0];
     res.json({
       ...table,
+      status: getEffectiveTableStatus(table),
       sessions: table.sessions.map((session) => ({
         ...session,
         orders: session.orders.map((order) => ({
@@ -202,7 +281,7 @@ adminRouter.get('/settings', async (_req, res, next) => {
   }
 });
 
-adminRouter.patch('/settings', async (req, res, next) => {
+adminRouter.patch('/settings', validate({ body: settingsUpdateBody }), async (req, res, next) => {
   try {
     const { serviceFeeType, serviceFeeValue, isServiceFeeEnabled } = req.body as {
       serviceFeeType?: 'PERCENT' | 'FIXED';
@@ -230,6 +309,15 @@ adminRouter.patch('/settings', async (req, res, next) => {
       },
     });
 
+    await writeAuditLog({
+      restaurantId: restaurant.id,
+      action: 'settings.update',
+      entityType: 'RestaurantSettings',
+      entityId: settings.id,
+      payload: { after: settings },
+      ...getAuditRequestContext(req),
+    });
+
     res.json(settings);
   } catch (error) {
     next(error);
@@ -245,7 +333,7 @@ adminRouter.get('/promotions', async (_req, res, next) => {
   }
 });
 
-adminRouter.post('/promotions', async (req, res, next) => {
+adminRouter.post('/promotions', validate({ body: promotionCreateBody }), async (req, res, next) => {
   try {
     const { name, code, discountType = 'PERCENT', discountValue, minOrderAmount = 0, startsAt, endsAt, usageLimit, isActive = true } = req.body as {
       name?: string;
@@ -279,17 +367,37 @@ adminRouter.post('/promotions', async (req, res, next) => {
       },
     });
 
+    await writeAuditLog({
+      restaurantId: restaurant.id,
+      action: 'promotion.create',
+      entityType: 'Promotion',
+      entityId: promotion.id,
+      payload: { new: promotion },
+      ...getAuditRequestContext(req),
+    });
+
     res.status(201).json(promotion);
   } catch (error) {
     next(error);
   }
 });
 
-adminRouter.patch('/promotions/:promotionId', async (req, res, next) => {
+adminRouter.patch('/promotions/:promotionId', validate({ params: params.promotionId, body: promotionUpdateBody }), async (req, res, next) => {
   try {
+    const promotionId = String(req.params.promotionId);
+    const existing = await prisma.promotion.findUnique({ where: { id: promotionId } });
     const promotion = await prisma.promotion.update({
-      where: { id: req.params.promotionId },
+      where: { id: promotionId },
       data: req.body,
+    });
+
+    await writeAuditLog({
+      restaurantId: promotion.restaurantId,
+      action: 'promotion.update',
+      entityType: 'Promotion',
+      entityId: promotion.id,
+      payload: { before: existing, after: promotion },
+      ...getAuditRequestContext(req),
     });
     res.json(promotion);
   } catch (error) {

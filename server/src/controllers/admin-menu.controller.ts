@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { realtimeGateway } from '../lib/realtime.js';
+import { getAuditRequestContext, writeAuditLog } from '../lib/audit.js';
 
 export const adminMenuRouter = Router();
 
@@ -162,15 +163,14 @@ adminMenuRouter.post('/', async (req, res, next) => {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        restaurantId: resolvedRestaurantId,
-        actorId: updatedBy,
-        action: 'menu.create',
-        entityType: 'MenuItem',
-        entityId: item.id,
-        payload: item as never,
-      },
+    await writeAuditLog({
+      restaurantId: resolvedRestaurantId,
+      actorId: updatedBy,
+      action: 'menu.create',
+      entityType: 'MenuItem',
+      entityId: item.id,
+      payload: { new: item },
+      ...getAuditRequestContext(req),
     });
 
     realtimeGateway.emitToRestaurant(resolvedRestaurantId, 'menu.updated', { restaurantId: resolvedRestaurantId });
@@ -232,15 +232,14 @@ adminMenuRouter.patch('/:itemId', async (req, res, next) => {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        restaurantId: item.restaurantId,
-        actorId: updatedBy,
-        action: 'menu.update',
-        entityType: 'MenuItem',
-        entityId: item.id,
-        payload: item as never,
-      },
+    await writeAuditLog({
+      restaurantId: item.restaurantId,
+      actorId: updatedBy,
+      action: 'menu.update',
+      entityType: 'MenuItem',
+      entityId: item.id,
+      payload: { before: existing, after: item },
+      ...getAuditRequestContext(req),
     });
 
     realtimeGateway.emitToRestaurant(item.restaurantId, 'menu.updated', { restaurantId: item.restaurantId });
@@ -269,15 +268,14 @@ adminMenuRouter.patch('/:itemId/stock', async (req, res, next) => {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        restaurantId: item.restaurantId,
-        actorId: updatedBy,
-        action: 'menu.stock',
-        entityType: 'MenuItem',
-        entityId: item.id,
-        payload: { isOutOfStock: item.isOutOfStock } as never,
-      },
+    await writeAuditLog({
+      restaurantId: item.restaurantId,
+      actorId: updatedBy,
+      action: 'menu.stock',
+      entityType: 'MenuItem',
+      entityId: item.id,
+      payload: { before: { isOutOfStock: existing.isOutOfStock }, after: { isOutOfStock: item.isOutOfStock } },
+      ...getAuditRequestContext(req),
     });
 
     realtimeGateway.emitToRestaurant(item.restaurantId, 'menu.updated', { restaurantId: item.restaurantId });
@@ -306,15 +304,14 @@ adminMenuRouter.delete('/:itemId', async (req, res, next) => {
       },
     });
 
-    await prisma.auditLog.create({
-      data: {
-        restaurantId: item.restaurantId,
-        actorId: updatedBy,
-        action: 'menu.delete',
-        entityType: 'MenuItem',
-        entityId: item.id,
-        payload: { isActive: false } as never,
-      },
+    await writeAuditLog({
+      restaurantId: item.restaurantId,
+      actorId: updatedBy,
+      action: 'menu.delete',
+      entityType: 'MenuItem',
+      entityId: item.id,
+      payload: { before: { isActive: existing.isActive }, after: { isActive: false } },
+      ...getAuditRequestContext(req),
     });
 
     realtimeGateway.emitToRestaurant(item.restaurantId, 'menu.updated', { restaurantId: item.restaurantId });

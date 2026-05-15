@@ -2,6 +2,8 @@ export function getTableStatusLabel(status: string) {
   switch (status) {
     case 'OCCUPIED':
       return 'Müşteri var';
+    case 'PENDING_APPROVAL':
+      return 'Bekleyen sipariş';
     case 'AVAILABLE':
       return 'Müşteri yok';
     case 'CLEANING':
@@ -21,6 +23,11 @@ export function getTableStatusStyles(status: string) {
       return {
         card: 'border-sky-200/80 bg-sky-50/80 text-sky-900',
         badge: 'bg-sky-100/90 text-sky-800',
+      };
+    case 'PENDING_APPROVAL':
+      return {
+        card: 'border-amber-200/80 bg-amber-50/80 text-amber-900',
+        badge: 'bg-amber-100/90 text-amber-800',
       };
     case 'AVAILABLE':
       return {

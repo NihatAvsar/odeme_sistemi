@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TableQrCard } from '../../components/qr/TableQrCard';
-import { cashSettleAdminTable, getAdminTable, type AdminTableDto } from '../../api/admin';
+import { cashSettleAdminTable, getAdminTable, updateAdminTableStatus, type AdminTableDto } from '../../api/admin';
 import { requireAdminSecret } from '../../api/admin-auth';
 import { getTableQrUrl } from '../../functions/qr';
 import { adminButtonClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass, adminStatCardClass, getAdminSummaryToneClasses } from './admin-theme';
@@ -12,6 +12,7 @@ export function TableDetailPage() {
   const { tableId = '' } = useParams();
   const [table, setTable] = useState<AdminTableDto | null>(null);
   const [settling, setSettling] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   useEffect(() => {
     if (!tableId) return;
@@ -63,6 +64,24 @@ export function TableDetailPage() {
               className={adminButtonClass}
             >
               {settling ? 'İşleniyor...' : 'Kasada Ödendi'}
+            </button>
+          ) : null}
+          {table.status === 'AVAILABLE' || table.status === 'RESERVED' ? (
+            <button
+              type="button"
+              disabled={updatingStatus}
+              onClick={async () => {
+                setUpdatingStatus(true);
+                try {
+                  await updateAdminTableStatus(table.id, table.status === 'RESERVED' ? 'AVAILABLE' : 'RESERVED');
+                  await getAdminTable(table.id).then(setTable);
+                } finally {
+                  setUpdatingStatus(false);
+                }
+              }}
+              className={adminSecondaryButtonClass}
+            >
+              {updatingStatus ? 'İşleniyor...' : table.status === 'RESERVED' ? 'Rezervasyonu Aç' : 'Rezerve Et'}
             </button>
           ) : null}
           <Link to="/admin/dashboard" className={adminSecondaryButtonClass}>Dashboard</Link>

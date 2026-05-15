@@ -3,6 +3,9 @@ import { prisma } from '../lib/prisma.js';
 import { realtimeGateway } from '../lib/realtime.js';
 import { hasAdminAuth } from '../middleware/admin-auth.js';
 import { paymentService } from '../services/payment.service.js';
+import { getAuditRequestContext, writeAuditLog } from '../lib/audit.js';
+import { validate } from '../middleware/validate.js';
+import { params, tableActionCreateBody, tableActionUpdateBody } from '../schemas/api.js';
 
 const actionTypes = ['CALL_WAITER', 'REQUEST_BILL', 'SEND_NOTE'] as const;
 const actionStatuses = ['OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'CANCELLED'] as const;
@@ -21,8 +24,9 @@ function isTableActionStatus(value: unknown): value is TableActionStatus {
 export const tableActionsRouter = Router();
 export const adminTableActionsRouter = Router();
 
-tableActionsRouter.post('/:tableCode/actions', async (req, res, next) => {
+tableActionsRouter.post('/:tableCode/actions', validate({ params: params.tableCode, body: tableActionCreateBody }), async (req, res, next) => {
   try {
+    const tableCode = String(req.params.tableCode);
     const { type, message } = req.body as { type?: unknown; message?: unknown };
     if (!isTableActionType(type)) {
       res.status(400).json({ message: 'Invalid table action type' });
@@ -36,7 +40,7 @@ tableActionsRouter.post('/:tableCode/actions', async (req, res, next) => {
     }
 
     const table = await prisma.table.findFirst({
-      where: { OR: [{ code: req.params.tableCode }, { id: req.params.tableCode }] },
+      where: { OR: [{ code: tableCode }, { id: tableCode }] },
       include: { restaurant: true },
     });
 
@@ -74,6 +78,15 @@ tableActionsRouter.post('/:tableCode/actions', async (req, res, next) => {
         message: cleanMessage,
       },
       include: { table: true, session: true },
+    });
+
+    await writeAuditLog({
+      restaurantId: table.restaurantId,
+      action: 'table_action.create',
+      entityType: 'TableAction',
+      entityId: action.id,
+      payload: { tableId: table.id, sessionId: session?.id, type, message: cleanMessage },
+      ...getAuditRequestContext(req),
     });
 
     realtimeGateway.emitToRestaurant(table.restaurantId, 'table.action.created', {
@@ -118,10 +131,11 @@ adminTableActionsRouter.get('/', async (req, res, next) => {
   }
 });
 
-adminTableActionsRouter.patch('/:actionId', async (req, res, next) => {
+adminTableActionsRouter.patch('/:actionId', validate({ params: params.actionId, body: tableActionUpdateBody }), async (req, res, next) => {
   if (!hasAdminAuth(req, res)) return;
 
   try {
+    const actionId = String(req.params.actionId);
     const { status, resolvedBy } = req.body as { status?: unknown; resolvedBy?: unknown };
     if (!isTableActionStatus(status)) {
       res.status(400).json({ message: 'Invalid table action status' });
@@ -129,7 +143,7 @@ adminTableActionsRouter.patch('/:actionId', async (req, res, next) => {
     }
 
     const existingAction = await prisma.tableAction.findUnique({
-      where: { id: req.params.actionId },
+      where: { id: actionId },
       include: {
         table: true,
         session: true,
@@ -142,7 +156,7 @@ adminTableActionsRouter.patch('/:actionId', async (req, res, next) => {
     }
 
     const action = await prisma.tableAction.update({
-      where: { id: req.params.actionId },
+      where: { id: actionId },
       data: {
         status,
         resolvedAt: status === 'RESOLVED' || status === 'CANCELLED' ? new Date() : null,
@@ -154,9 +168,19 @@ adminTableActionsRouter.patch('/:actionId', async (req, res, next) => {
       },
     });
 
+    await writeAuditLog({
+      restaurantId: action.restaurantId,
+      actorId: typeof resolvedBy === 'string' ? resolvedBy : undefined,
+      action: 'table_action.update',
+      entityType: 'TableAction',
+      entityId: action.id,
+      payload: { before: { status: existingAction.status }, after: { status: action.status, resolvedAt: action.resolvedAt } },
+      ...getAuditRequestContext(req),
+    });
+
     if (existingAction.type === 'REQUEST_BILL' && status === 'RESOLVED') {
       try {
-        await paymentService.cashSettleTable(existingAction.tableId, 'Hesap İsteği Çözüldü');
+        await paymentService.cashSettleTable(existingAction.tableId, 'Hesap İsteği Çözüldü', getAuditRequestContext(req));
       } catch (settleError) {
         const message = settleError instanceof Error ? settleError.message : '';
         if (!message.includes('Open order not found') && !message.includes('Order already settled')) {

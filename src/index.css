@@ -22,6 +22,14 @@ body {
   background-attachment: fixed;
 }
 
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @media print {
   body {
     background: #ffffff !important;

@@ -33,7 +33,7 @@ export function ItemSplitSelector({ items, onConfirm, loading = false }: Props) 
   };
 
   return (
-    <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    <section className="rounded-[2rem] bg-white p-4 shadow-sm ring-1 ring-slate-200 md:p-6">
       <div className="mb-5">
         <h2 className="text-xl font-semibold text-slate-900">Kalem Bazlı Bölüşme</h2>
         <p className="mt-1 text-sm text-slate-500">Sadece yediklerini seç ve ödemeye geç.</p>
@@ -46,8 +46,8 @@ export function ItemSplitSelector({ items, onConfirm, loading = false }: Props) 
           const paid = remaining === 0;
 
           return (
-            <article key={item.id} className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
-              <div>
+            <article key={item.id} className="flex flex-col gap-4 rounded-3xl border border-slate-200 bg-slate-50/60 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="font-medium text-slate-900">{item.name}</p>
                   {paid ? (
@@ -60,23 +60,23 @@ export function ItemSplitSelector({ items, onConfirm, loading = false }: Props) 
                 <p className="text-xs text-slate-400">Kalan adet: {remaining}</p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2 sm:justify-end">
                 <button
                   type="button"
                   onClick={() => changeQty(item, -1)}
                   disabled={selectedQty === 0 || paid}
-                  className="h-10 w-10 rounded-full border border-slate-300 text-lg font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-12 w-12 rounded-full border border-slate-300 bg-white text-lg font-semibold shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   -
                 </button>
 
-                <span className="w-8 text-center text-sm font-semibold">{selectedQty}</span>
+                <span className="w-12 rounded-full bg-white px-3 py-2 text-center text-sm font-semibold shadow-sm ring-1 ring-slate-100">{selectedQty}</span>
 
                 <button
                   type="button"
                   onClick={() => changeQty(item, 1)}
                   disabled={paid || selectedQty >= remaining}
-                  className="h-10 w-10 rounded-full border border-slate-300 text-lg font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-12 w-12 rounded-full bg-black text-lg font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   +
                 </button>
@@ -86,17 +86,17 @@ export function ItemSplitSelector({ items, onConfirm, loading = false }: Props) 
         })}
       </div>
 
-      <div className="mt-6 rounded-2xl bg-slate-50 p-4">
+      <div className="mt-6 rounded-3xl bg-slate-950 p-4 text-white">
         <div className="flex items-center justify-between">
-          <span className="text-sm text-slate-600">Seçilen toplam</span>
-          <span className="text-lg font-semibold text-slate-900">{formatMoney(total)}</span>
+          <span className="text-sm text-white/65">Seçilen toplam</span>
+          <span className="text-lg font-semibold">{formatMoney(total)}</span>
         </div>
 
         <div className="mt-4 flex gap-2">
           <button
             type="button"
             onClick={() => setSelected({})}
-            className="flex-1 rounded-2xl border border-slate-300 px-4 py-3 text-sm font-medium"
+            className="flex-1 rounded-2xl border border-white/20 px-4 py-3 text-sm font-medium text-white/85"
           >
             Temizle
           </button>
@@ -104,7 +104,7 @@ export function ItemSplitSelector({ items, onConfirm, loading = false }: Props) 
             type="button"
             onClick={() => void onConfirm(selectedItems)}
             disabled={selectedItems.length === 0 || loading}
-            className="flex-1 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? 'İşleniyor...' : 'Ödemeye Geç'}
           </button>

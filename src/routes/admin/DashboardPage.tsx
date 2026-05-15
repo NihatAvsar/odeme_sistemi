@@ -44,7 +44,7 @@ export function DashboardPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <Stat label="Toplam Masa" value={String(tables.length)} />
         <Stat label="Bekleyen Sipariş" value={String(pending.length)} />
-        <Stat label="Aktif Masa" value={String(tables.filter((table) => table.sessions.length > 0).length)} />
+        <Stat label="Aktif Masa" value={String(tables.filter((table) => table.status === 'OCCUPIED' || table.status === 'PENDING_APPROVAL').length)} />
       </section>
 
       <section className="mt-6 rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-200">

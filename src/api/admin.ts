@@ -59,3 +59,11 @@ export async function cashSettleAdminTable(tableId: string) {
     headers: { 'x-admin-secret': getAdminSecret() },
   });
 }
+
+export async function updateAdminTableStatus(tableId: string, status: 'AVAILABLE' | 'RESERVED') {
+  return fetchJSON<AdminTableDto>(`/api/admin/tables/${tableId}/status`, {
+    method: 'PATCH',
+    headers: { 'x-admin-secret': getAdminSecret() },
+    body: JSON.stringify({ status }),
+  });
+}

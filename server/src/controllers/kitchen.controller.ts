@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { hasAdminAuth } from '../middleware/admin-auth.js';
 import { realtimeGateway } from '../lib/realtime.js';
+import { getAuditRequestContext, writeAuditLog } from '../lib/audit.js';
+import { validate } from '../middleware/validate.js';
+import { kitchenTicketUpdateBody, params } from '../schemas/api.js';
 
 export const kitchenRouter = Router();
 
@@ -26,19 +29,39 @@ kitchenRouter.get('/tickets', async (req, res, next) => {
   }
 });
 
-kitchenRouter.patch('/tickets/:orderItemId', async (req, res, next) => {
+kitchenRouter.patch('/tickets/:orderItemId', validate({ params: params.orderItemId, body: kitchenTicketUpdateBody }), async (req, res, next) => {
   if (!hasAdminAuth(req, res)) return;
   try {
+    const orderItemId = String(req.params.orderItemId);
     const { status } = req.body as { status?: 'NEW' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED' };
     if (!status || !['NEW', 'PREPARING', 'READY', 'SERVED', 'CANCELLED'].includes(status)) {
       res.status(400).json({ message: 'Invalid kitchen status' });
       return;
     }
 
+    const existing = await prisma.orderItem.findUnique({
+      where: { id: orderItemId },
+      include: { order: true },
+    }) as any;
+
+    if (!existing) {
+      res.status(404).json({ message: 'Order item not found' });
+      return;
+    }
+
     const item = await prisma.orderItem.update({
-      where: { id: req.params.orderItemId },
+      where: { id: orderItemId },
       data: { kitchenStatus: status },
       include: { order: true },
+    }) as any;
+
+    await writeAuditLog({
+      restaurantId: item.order.restaurantId,
+      action: 'kitchen.ticket.update',
+      entityType: 'OrderItem',
+      entityId: item.id,
+      payload: { before: { kitchenStatus: existing.kitchenStatus }, after: { kitchenStatus: status } },
+      ...getAuditRequestContext(req),
     });
 
     realtimeGateway.emitToRestaurant(item.order.restaurantId, 'kitchen.ticket.updated', {

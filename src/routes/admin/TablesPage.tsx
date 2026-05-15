@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TableQrCard } from '../../components/qr/TableQrCard';
-import { createAdminTables, getAdminTables, type AdminTableDto } from '../../api/admin';
+import { createAdminTables, getAdminTables, updateAdminTableStatus, type AdminTableDto } from '../../api/admin';
 import { requireAdminSecret } from '../../api/admin-auth';
 import { downloadCanvasPng, getTableQrUrl } from '../../functions/qr';
 import { adminButtonClass, adminCardClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass, adminStatCardClass, getAdminSummaryToneClasses } from './admin-theme';
@@ -16,6 +16,7 @@ export function TablesPage() {
   const [creating, setCreating] = useState(false);
   const [visibleQrTableId, setVisibleQrTableId] = useState<string | null>(null);
   const [printTables, setPrintTables] = useState<AdminTableDto[]>([]);
+  const [updatingTableId, setUpdatingTableId] = useState<string | null>(null);
 
   useEffect(() => {
     requireAdminSecret();
@@ -23,7 +24,7 @@ export function TablesPage() {
   }, []);
 
   const sortedTables = useMemo(() => {
-    const order = { OCCUPIED: 0, CLEANING: 1, RESERVED: 2, AVAILABLE: 3, DISABLED: 4 } as const;
+    const order = { PENDING_APPROVAL: 0, OCCUPIED: 1, CLEANING: 2, RESERVED: 3, AVAILABLE: 4, DISABLED: 5 } as const;
     return [...tables].sort((a, b) => {
       const aRank = order[a.status as keyof typeof order] ?? 99;
       const bRank = order[b.status as keyof typeof order] ?? 99;
@@ -34,11 +35,12 @@ export function TablesPage() {
 
   const summary = useMemo(() => {
     const occupied = tables.filter((table) => table.status === 'OCCUPIED').length;
+    const pending = tables.filter((table) => table.status === 'PENDING_APPROVAL').length;
     const cleaning = tables.filter((table) => table.status === 'CLEANING').length;
     const available = tables.filter((table) => table.status === 'AVAILABLE').length;
     const reserved = tables.filter((table) => table.status === 'RESERVED').length;
 
-    return { total: tables.length, occupied, cleaning, available, reserved };
+    return { total: tables.length, occupied, pending, cleaning, available, reserved };
   }, [tables]);
 
   useEffect(() => {
@@ -58,6 +60,16 @@ export function TablesPage() {
     const canvas = document.getElementById(`qr-download-${table.id}`) as HTMLCanvasElement | null;
     if (!canvas) return;
     downloadCanvasPng(canvas, `masa-${table.code}-qr.png`);
+  };
+
+  const updateTableStatus = async (table: AdminTableDto, status: 'AVAILABLE' | 'RESERVED') => {
+    setUpdatingTableId(table.id);
+    try {
+      await updateAdminTableStatus(table.id, status);
+      await getAdminTables().then(setTables);
+    } finally {
+      setUpdatingTableId(null);
+    }
   };
 
   return (
@@ -95,9 +107,10 @@ export function TablesPage() {
         ))}
       </div>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <StatCard label="Toplam Masa" value={summary.total} tone="brand" />
         <StatCard label="Müşteri Var" value={summary.occupied} tone="sky" />
+        <StatCard label="Bekleyen Sipariş" value={summary.pending} tone="amber" />
         <StatCard label="Temizleniyor" value={summary.cleaning} tone="violet" />
         <StatCard label="Müşteri Yok" value={summary.available} tone="rose" />
         <StatCard label="Rezerve" value={summary.reserved} tone="amber" />
@@ -182,6 +195,16 @@ export function TablesPage() {
               <Link to={`/table/${table.code}`} className={adminSecondaryButtonClass}>
                 Müşteri Ekranı
               </Link>
+              {table.status === 'AVAILABLE' ? (
+                <button type="button" disabled={updatingTableId === table.id} onClick={() => void updateTableStatus(table, 'RESERVED')} className={adminSecondaryButtonClass}>
+                  {updatingTableId === table.id ? 'İşleniyor...' : 'Rezerve Et'}
+                </button>
+              ) : null}
+              {table.status === 'RESERVED' ? (
+                <button type="button" disabled={updatingTableId === table.id} onClick={() => void updateTableStatus(table, 'AVAILABLE')} className={adminSecondaryButtonClass}>
+                  {updatingTableId === table.id ? 'İşleniyor...' : 'Rezervasyonu Aç'}
+                </button>
+              ) : null}
             </div>
             {visibleQrTableId === table.id ? (
               <div className="mt-5">

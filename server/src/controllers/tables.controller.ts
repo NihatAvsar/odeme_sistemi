@@ -30,6 +30,11 @@ tablesRouter.get('/:tableCode', async (req, res, next) => {
       await releaseTableIfDue(table.id);
     }
 
+    if (table.status === 'RESERVED') {
+      res.status(423).json({ message: 'Bu masa şu anda rezerve.' });
+      return;
+    }
+
     const session = await prisma.tableSession.findFirst({
       where: {
         tableId: table.id,
@@ -61,10 +66,6 @@ tablesRouter.get('/:tableCode', async (req, res, next) => {
           },
         },
       }));
-
-    if (table.status !== 'OCCUPIED') {
-      await prisma.table.update({ where: { id: table.id }, data: { status: 'OCCUPIED' } });
-    }
 
     const activeOrder = activeSession?.orders[0] ?? null;
 

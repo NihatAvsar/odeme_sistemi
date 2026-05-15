@@ -2,6 +2,10 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { hasAdminAuth } from '../middleware/admin-auth.js';
 import { realtimeGateway } from '../lib/realtime.js';
+import { getAuditRequestContext, writeAuditLog } from '../lib/audit.js';
+import { incrementMetric } from '../lib/metrics.js';
+import { validate } from '../middleware/validate.js';
+import { orderRequestApproveBody, orderRequestCreateBody, orderRequestRejectBody, params } from '../schemas/api.js';
 
 type RequestedItem = {
   menuItemId: string;
@@ -37,7 +41,7 @@ async function getDiscount(restaurantId: string, subtotal: number, couponCode?: 
 
 export const orderRequestsRouter = Router();
 
-orderRequestsRouter.post('/', async (req, res, next) => {
+orderRequestsRouter.post('/', validate({ body: orderRequestCreateBody }), async (req, res, next) => {
   try {
     const { tableId, requestedBy, note, couponCode, items } = req.body as {
       tableId?: string;
@@ -98,6 +102,16 @@ orderRequestsRouter.post('/', async (req, res, next) => {
       },
     });
 
+    await writeAuditLog({
+      restaurantId: table.restaurantId,
+      actorId: requestedBy,
+      action: 'order_request.create',
+      entityType: 'OrderRequest',
+      entityId: orderRequest.id,
+      payload: { tableId: table.id, sessionId: table.sessions[0].id, items, couponCode: orderRequest.couponCode },
+      ...getAuditRequestContext(req),
+    });
+
     realtimeGateway.emitToTable(table.id, 'table.updated', {
       tableId: table.id,
       status: 'PENDING_APPROVAL',
@@ -139,16 +153,17 @@ orderRequestsRouter.get('/', async (req, res, next) => {
   }
 });
 
-orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
+orderRequestsRouter.post('/:id/approve', validate({ params: params.orderRequestId, body: orderRequestApproveBody }), async (req, res, next) => {
   if (!hasAdminAuth(req, res)) return;
   try {
+    const requestId = String(req.params.id);
     const { adminName } = req.body as { adminName?: string };
     const request = await prisma.orderRequest.findUnique({
-      where: { id: req.params.id },
+      where: { id: requestId },
       include: {
         tableSession: { include: { table: true } },
       },
-    });
+    }) as any;
 
     if (!request) {
       res.status(404).json({ message: 'Order request not found' });
@@ -306,6 +321,17 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
       restaurantId: request.restaurantId,
       orderId: approvedOrder.id,
     });
+    incrementMetric('order_request_events_total', { action: 'approve' });
+
+    await writeAuditLog({
+      restaurantId: request.restaurantId,
+      actorId: adminName,
+      action: 'order_request.approve',
+      entityType: 'OrderRequest',
+      entityId: request.id,
+      payload: { orderId: approvedOrder.id, tableId: request.tableSession.table.id, status: 'APPROVED' },
+      ...getAuditRequestContext(req),
+    });
 
     res.json(approvedOrder);
   } catch (error) {
@@ -313,14 +339,15 @@ orderRequestsRouter.post('/:id/approve', async (req, res, next) => {
   }
 });
 
-orderRequestsRouter.post('/:id/reject', async (req, res, next) => {
+orderRequestsRouter.post('/:id/reject', validate({ params: params.orderRequestId, body: orderRequestRejectBody }), async (req, res, next) => {
   if (!hasAdminAuth(req, res)) return;
   try {
+    const requestId = String(req.params.id);
     const { adminName, reason } = req.body as { adminName?: string; reason?: string };
     const request = await prisma.orderRequest.findUnique({
-      where: { id: req.params.id },
+      where: { id: requestId },
       include: { tableSession: { include: { table: true } } },
-    });
+    }) as any;
 
     if (!request) {
       res.status(404).json({ message: 'Order request not found' });
@@ -345,6 +372,17 @@ orderRequestsRouter.post('/:id/reject', async (req, res, next) => {
       tableId: request.tableSession.table.id,
       orderRequestId: request.id,
       status: 'REJECTED',
+    });
+    incrementMetric('order_request_events_total', { action: 'reject' });
+
+    await writeAuditLog({
+      restaurantId: request.restaurantId,
+      actorId: adminName,
+      action: 'order_request.reject',
+      entityType: 'OrderRequest',
+      entityId: request.id,
+      payload: { tableId: request.tableSession.table.id, status: 'REJECTED', reason },
+      ...getAuditRequestContext(req),
     });
 
     res.json(updated);
