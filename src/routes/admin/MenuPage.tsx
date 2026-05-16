@@ -19,6 +19,7 @@ type FormState = {
   categoryId: string;
   name: string;
   description: string;
+  imageUrl: string;
   price: string;
   currency: string;
   isActive: boolean;
@@ -51,6 +52,7 @@ const emptyForm: FormState = {
   categoryId: '',
   name: '',
   description: '',
+  imageUrl: '',
   price: '',
   currency: 'TRY',
   isActive: true,
@@ -300,6 +302,7 @@ export function MenuPage() {
       categoryId: editingItem.categoryId ?? '',
       name: editingItem.name,
       description: editingItem.description ?? '',
+      imageUrl: editingItem.imageUrl ?? '',
       price: String(editingItem.price),
       currency: editingItem.currency,
       isActive: editingItem.isActive,
@@ -341,6 +344,7 @@ export function MenuPage() {
         categoryId: form.categoryId || undefined,
         name: form.name,
         description: form.description || undefined,
+        imageUrl: form.imageUrl.trim() || null,
         price: Number(form.price),
         currency: form.currency,
         isActive: form.isActive,
@@ -405,7 +409,11 @@ export function MenuPage() {
             {filteredItems.map((item) => (
               <article key={item.id} className="rounded-2xl border border-slate-200 p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex min-w-0 gap-3">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.name} className="h-16 w-16 rounded-2xl object-cover ring-1 ring-slate-200" />
+                    ) : null}
+                    <div className="min-w-0">
                     <h3 className="font-medium">{item.name}</h3>
                     <p className="text-sm text-slate-500">{item.description}</p>
                     {item.optionGroups && item.optionGroups.length > 0 ? (
@@ -414,6 +422,7 @@ export function MenuPage() {
                     <div className="mt-2 flex gap-2 text-xs">
                       {!item.isActive ? <span className="rounded-full bg-slate-100 px-2 py-1">Pasif</span> : null}
                       {item.isOutOfStock ? <span className="rounded-full bg-rose-100 px-2 py-1 text-rose-700">Stok yok</span> : null}
+                    </div>
                     </div>
                   </div>
                   <span className="font-semibold">{Number(item.price).toFixed(2)} TL</span>
@@ -468,6 +477,10 @@ export function MenuPage() {
             </select>
             <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="w-full rounded-xl border px-3 py-2" placeholder="Ürün adı" />
             <input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="w-full rounded-xl border px-3 py-2" placeholder="Açıklama" />
+            <input value={form.imageUrl} onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))} className="w-full rounded-xl border px-3 py-2" placeholder="Resim URL" />
+            {form.imageUrl.trim() ? (
+              <img src={form.imageUrl.trim()} alt="Ürün önizleme" className="h-36 w-full rounded-2xl object-cover ring-1 ring-slate-200" />
+            ) : null}
             <div className="grid grid-cols-2 gap-2">
               <input value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))} className="w-full rounded-xl border px-3 py-2" placeholder="Fiyat" />
               <input value={form.currency} onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))} className="w-full rounded-xl border px-3 py-2" placeholder="TRY" />
