@@ -89,6 +89,8 @@ export class PaymentService {
         },
       });
 
+      let allItemsPaid = false;
+
       if (payment.type === 'ITEM_SPLIT' && selectedItems.length > 0) {
         const orderItems = await tx.orderItem.findMany({
           where: {
@@ -143,21 +145,32 @@ export class PaymentService {
             remainingToApply -= applyQty;
           }
         }
+
+        const unpaidItemCount = await tx.orderItem.count({
+          where: {
+            orderId: payment.orderId,
+            status: { in: ['OPEN', 'PARTIALLY_PAID'] },
+          },
+        });
+        allItemsPaid = unpaidItemCount === 0;
       }
+
+      const orderClosed = remainingAfter <= 0 || allItemsPaid;
+      const closedAt = new Date();
 
       await tx.order.update({
         where: { id: payment.orderId },
         data: {
-          paidTotal: paidTotalAfter,
-          remaining: Math.max(0, remainingAfter),
-          status: remainingAfter <= 0 ? 'PAID' : 'PARTIALLY_PAID',
-          closedAt: remainingAfter <= 0 ? new Date() : payment.order.closedAt,
+          paidTotal: orderClosed ? payment.order.total : paidTotalAfter,
+          remaining: orderClosed ? 0 : Math.max(0, remainingAfter),
+          status: orderClosed ? 'PAID' : 'PARTIALLY_PAID',
+          closedAt: orderClosed ? closedAt : payment.order.closedAt,
           version: { increment: 1 },
         },
       });
 
-      if (remainingAfter <= 0) {
-        await scheduleTableCleanup(payment.order.session.table.id, payment.order.sessionId, new Date(), tx);
+      if (orderClosed) {
+        await scheduleTableCleanup(payment.order.session.table.id, payment.order.sessionId, closedAt, tx);
       }
 
       return paidPayment;
