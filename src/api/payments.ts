@@ -10,7 +10,6 @@ export type PaymentInitiateInput = {
   payerName?: string;
   payerCount?: number;
   idempotencyKey: string;
-  provider?: 'mock-stripe' | 'mock-iyzico';
   metadata?: Record<string, unknown>;
 };
 

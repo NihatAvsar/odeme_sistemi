@@ -58,7 +58,7 @@ orderRequestsRouter.post('/', validate({ body: orderRequestCreateBody }), async 
 
     const table = await prisma.table.findFirst({
       where: {
-        OR: [{ id: tableId }, { code: tableId }],
+        OR: [{ id: tableId }, { code: tableId }, { qrToken: tableId }],
       },
       include: {
         restaurant: true,

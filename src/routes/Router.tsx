@@ -1,4 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom';
+import { useEffect, type ReactNode } from 'react';
 import { TablePage } from './table/TablePage';
 import { CheckoutPage } from './payments/CheckoutPage';
 import { PaymentSuccessPage } from './payments/PaymentSuccessPage';
@@ -12,13 +13,22 @@ import { SettingsPage } from './admin/SettingsPage';
 import { KitchenPage } from './admin/KitchenPage';
 import { ReportsPage } from './admin/ReportsPage';
 import { TableActionsPage } from './admin/TableActionsPage';
+import { clearAdminSession } from '../api/admin-auth';
+
+function CustomerRoute({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    clearAdminSession();
+  }, []);
+
+  return children;
+}
 
 export const router = createBrowserRouter([
-  { path: '/', element: <TablePage /> },
-  { path: '/table/:tableCode', element: <TablePage /> },
-  { path: '/menu/:tableCode', element: <CustomerMenuPage /> },
-  { path: '/checkout', element: <CheckoutPage /> },
-  { path: '/checkout/success', element: <PaymentSuccessPage /> },
+  { path: '/', element: <CustomerRoute><TablePage /></CustomerRoute> },
+  { path: '/table/:tableCode', element: <CustomerRoute><TablePage /></CustomerRoute> },
+  { path: '/menu/:tableCode', element: <CustomerRoute><CustomerMenuPage /></CustomerRoute> },
+  { path: '/checkout', element: <CustomerRoute><CheckoutPage /></CustomerRoute> },
+  { path: '/checkout/success', element: <CustomerRoute><PaymentSuccessPage /></CustomerRoute> },
   { path: '/admin/dashboard', element: <DashboardPage /> },
   { path: '/admin/tables', element: <TablesPage /> },
   { path: '/admin/pending-orders', element: <PendingOrdersPage /> },

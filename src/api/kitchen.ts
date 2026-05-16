@@ -13,6 +13,7 @@ export type KitchenTicketDto = {
   createdAt: string;
   order: {
     id: string;
+    restaurantId: string;
     session: { table: { id: string; code: string; name?: string | null } };
   };
 };

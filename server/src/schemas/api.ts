@@ -25,7 +25,6 @@ export const paymentInitiateBody = z.object({
   type: z.enum(['FULL_BILL', 'ITEM_SPLIT', 'AMOUNT_SPLIT', 'TIP_ONLY']),
   amount: positiveMoney,
   tipAmount: nonNegativeMoney.optional(),
-  provider: z.enum(['mock-stripe', 'mock-iyzico']).optional(),
   idempotencyKey: z.string().trim().min(8).max(180),
   payerName: z.string().trim().min(1).max(120).optional(),
   payerCount: z.coerce.number().int().positive().max(100).optional(),

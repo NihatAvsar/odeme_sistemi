@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { env } from '../config/env.js';
 
-function isValidAdminSecret(secret: string | undefined) {
+export function isValidAdminSecret(secret: string | undefined) {
   if (!secret || !env.adminSecret) return false;
   const received = Buffer.from(secret);
   const expected = Buffer.from(env.adminSecret);

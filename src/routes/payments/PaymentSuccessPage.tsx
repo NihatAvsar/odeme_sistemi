@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 
 export function PaymentSuccessPage() {
   const location = useLocation();
-  const tableId = (location.state as { tableId?: string } | null)?.tableId;
+  const queryTableId = new URLSearchParams(location.search).get('tableId') ?? undefined;
+  const tableId = (location.state as { tableId?: string } | null)?.tableId ?? queryTableId;
 
   return (
     <main className="mx-auto flex min-h-full max-w-2xl items-center p-3 md:p-8">

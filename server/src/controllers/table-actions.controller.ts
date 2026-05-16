@@ -40,7 +40,7 @@ tableActionsRouter.post('/:tableCode/actions', validate({ params: params.tableCo
     }
 
     const table = await prisma.table.findFirst({
-      where: { OR: [{ code: tableCode }, { id: tableCode }] },
+      where: { OR: [{ code: tableCode }, { id: tableCode }, { qrToken: tableCode }] },
       include: { restaurant: true },
     });
 

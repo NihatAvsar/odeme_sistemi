@@ -1,6 +1,7 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import { env } from '../config/env.js';
+import { isValidAdminSecret } from '../middleware/admin-auth.js';
 
 export type RealtimeEvents = {
   'order.updated': (payload: { tableId: string; orderId: string }) => void;
@@ -41,6 +42,12 @@ export class RealtimeGateway {
 
       // Admin paneli tüm restaurant event'lerini dinlemek için
       socket.on('admin:join', (restaurantId: string) => {
+        const adminSecret = typeof socket.handshake.auth?.adminSecret === 'string'
+          ? socket.handshake.auth.adminSecret
+          : typeof socket.handshake.headers['x-admin-secret'] === 'string'
+            ? socket.handshake.headers['x-admin-secret']
+            : undefined;
+        if (!isValidAdminSecret(adminSecret)) return;
         socket.join(`restaurant:${restaurantId}`);
       });
     });

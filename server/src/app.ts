@@ -23,6 +23,7 @@ import { createReadinessHandler } from './lib/readiness.js';
 const globalRateLimit = createRateLimit({ name: 'global', windowMs: 60_000, max: 300 });
 const adminRateLimit = createRateLimit({ name: 'admin', windowMs: 60_000, max: 120 });
 const paymentRateLimit = createRateLimit({ name: 'payments', windowMs: 60_000, max: 40 });
+const webhookRateLimit = createRateLimit({ name: 'webhooks', windowMs: 60_000, max: 120 });
 const orderRequestRateLimit = createRateLimit({ name: 'order_requests', windowMs: 60_000, max: 30 });
 const tableActionRateLimit = createRateLimit({ name: 'table_actions', windowMs: 60_000, max: 30 });
 const promotionRateLimit = createRateLimit({ name: 'promotions', windowMs: 60_000, max: 60 });
@@ -44,6 +45,7 @@ export function createApp() {
   app.use(securityHeaders);
   app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(express.json({ limit: '100kb' }));
+  app.use(express.urlencoded({ extended: false, limit: '100kb' }));
   app.use(requestLogger);
   app.use(metricsMiddleware);
   app.use(globalRateLimit);
@@ -67,7 +69,7 @@ export function createApp() {
   app.use('/api/orders', ordersRouter);
   app.use('/api/admin/kitchen', kitchenRouter);
   app.use('/api/promotions', promotionRateLimit, promotionsRouter);
-  app.use('/api/webhooks', webhookRouter);
+  app.use('/api/webhooks', webhookRateLimit, webhookRouter);
 
   app.use(createErrorHandler());
 

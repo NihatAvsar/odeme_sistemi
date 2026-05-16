@@ -95,7 +95,7 @@ export function TablesPage() {
             key={table.id}
             tableCode={table.code}
             tableName={table.name}
-            url={getTableQrUrl(table.code)}
+            url={getTableQrUrl(table.qrToken)}
             canvasId={`qr-download-${table.id}`}
           />
         ))}
@@ -103,7 +103,7 @@ export function TablesPage() {
 
       <div className="qr-print-area hidden">
         {printTables.map((table) => (
-          <TableQrCard key={table.id} tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.code)} />
+          <TableQrCard key={table.id} tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.qrToken)} />
         ))}
       </div>
 
@@ -177,7 +177,7 @@ export function TablesPage() {
               <button
                 type="button"
                 onClick={async () => {
-                  await navigator.clipboard.writeText(getTableQrUrl(table.code));
+                  await navigator.clipboard.writeText(getTableQrUrl(table.qrToken));
                 }}
                 className={adminSecondaryButtonClass}
               >
@@ -192,7 +192,7 @@ export function TablesPage() {
               <button type="button" onClick={() => setPrintTables([table])} className={adminSecondaryButtonClass}>
                 QR Yazdır
               </button>
-              <Link to={`/table/${table.code}`} className={adminSecondaryButtonClass}>
+              <Link to={`/table/${table.qrToken}`} className={adminSecondaryButtonClass}>
                 Müşteri Ekranı
               </Link>
               {table.status === 'AVAILABLE' ? (
@@ -208,7 +208,7 @@ export function TablesPage() {
             </div>
             {visibleQrTableId === table.id ? (
               <div className="mt-5">
-                <TableQrCard tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.code)} />
+                <TableQrCard tableCode={table.code} tableName={table.name} url={getTableQrUrl(table.qrToken)} />
               </div>
             ) : null}
           </div>

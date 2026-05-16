@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getKitchenTickets, updateKitchenTicket, type KitchenStatus, type KitchenTicketDto } from '../../api/kitchen';
 import { requireAdminSecret } from '../../api/admin-auth';
-import { getSocket } from '../../lib/socket';
+import { getAdminSocket } from '../../lib/socket';
 import { adminButtonClass, adminPageClass, adminSecondaryButtonClass } from './admin-theme';
 
 const statuses: KitchenStatus[] = ['NEW', 'PREPARING', 'READY', 'SERVED', 'CANCELLED'];
@@ -10,14 +10,21 @@ const statuses: KitchenStatus[] = ['NEW', 'PREPARING', 'READY', 'SERVED', 'CANCE
 export function KitchenPage() {
   const [tickets, setTickets] = useState<KitchenTicketDto[]>([]);
 
-  const refresh = async () => setTickets(await getKitchenTickets());
+  const refresh = async () => {
+    const nextTickets = await getKitchenTickets();
+    setTickets(nextTickets);
+    return nextTickets;
+  };
 
   useEffect(() => {
     requireAdminSecret();
-    void refresh();
 
-    const socket = getSocket();
+    const socket = getAdminSocket();
     socket.connect();
+    void refresh().then((nextTickets) => {
+      const restaurantId = nextTickets[0]?.order.restaurantId;
+      if (restaurantId) socket.emit('admin:join', restaurantId);
+    });
     socket.on('kitchen.ticket.created', refresh);
     socket.on('kitchen.ticket.updated', refresh);
     return () => {

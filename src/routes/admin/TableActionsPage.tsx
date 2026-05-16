@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { getAdminTableActions, updateAdminTableAction } from '../../api/admin-table-actions';
 import { requireAdminSecret } from '../../api/admin-auth';
 import type { TableActionDto, TableActionStatus, TableActionType } from '../../api/table-actions';
-import { getSocket } from '../../lib/socket';
+import { getAdminSocket } from '../../lib/socket';
 
 export function TableActionsPage() {
   const [actions, setActions] = useState<TableActionDto[]>([]);
@@ -25,7 +25,7 @@ export function TableActionsPage() {
     const restaurantId = actions[0]?.restaurantId;
     if (!restaurantId) return;
 
-    const socket = getSocket();
+    const socket = getAdminSocket();
     socket.connect();
     socket.emit('admin:join', restaurantId);
 

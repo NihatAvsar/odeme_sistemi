@@ -1,4 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
+import { getAdminSecret } from '../api/admin-auth';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:3000';
 
@@ -13,4 +14,10 @@ export function getSocket() {
   }
 
   return socket;
+}
+
+export function getAdminSocket() {
+  const adminSocket = getSocket();
+  adminSocket.auth = { ...(adminSocket.auth as Record<string, unknown>), adminSecret: getAdminSecret() };
+  return adminSocket;
 }

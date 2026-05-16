@@ -2,11 +2,13 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import { MockPaymentProvider } from '../providers/mock-payment-provider.js';
+import { IyzicoPaymentProvider } from '../providers/iyzico-payment-provider.js';
 import type { PaymentConfirmInput, PaymentInitiateInput } from '../types/payment.js';
 import { realtimeGateway } from '../lib/realtime.js';
 import { scheduleTableCleanup } from './table-release.service.js';
 import { writeAuditLog } from '../lib/audit.js';
 import { incrementMetric } from '../lib/metrics.js';
+import { env } from '../config/env.js';
 
 type SelectedItem = {
   id: string;
@@ -48,7 +50,17 @@ function normalizeSelectedItems(metadata: unknown): SelectedItem[] {
 const providers = {
   'mock-stripe': new MockPaymentProvider(),
   'mock-iyzico': new MockPaymentProvider(),
+  iyzico: new IyzicoPaymentProvider(),
 } as const;
+
+type ProviderName = keyof typeof providers;
+
+function resolveProviderName(provider?: string): ProviderName {
+  const selected = provider ?? env.paymentProvider;
+  if (!(selected in providers)) return env.isProduction ? 'iyzico' : 'mock-stripe';
+  if (env.isProduction && selected !== 'iyzico') return 'iyzico';
+  return selected as ProviderName;
+}
 
 export class PaymentService {
   private async finalizeSuccessfulPayment(paymentId: string, providerRef?: string, auditContext?: AuditContext) {
@@ -210,7 +222,7 @@ export class PaymentService {
   }
 
   async initiate(input: PaymentInitiateInput, auditContext?: AuditContext) {
-    const provider = providers[input.provider ?? 'mock-stripe'] ?? providers['mock-stripe'];
+    const provider = providers[resolveProviderName()];
 
     const order = await prisma.order.findUnique({
       where: { id: input.orderId },
@@ -345,7 +357,7 @@ export class PaymentService {
       return this.finalizeSuccessfulPayment(input.paymentId, input.providerRef ?? payment.providerRef ?? undefined, auditContext);
     }
 
-    const provider = providers[payment.provider as keyof typeof providers] ?? providers['mock-stripe'];
+    const provider = providers[resolveProviderName(payment.provider)];
     const providerRef = input.providerRef ?? payment.providerRef;
 
     if (!providerRef) {
@@ -375,6 +387,45 @@ export class PaymentService {
     }
 
     return this.finalizeSuccessfulPayment(input.paymentId, result.providerRef, auditContext);
+  }
+
+  async confirmProviderCallback(providerName: ProviderName, providerRef: string, auditContext?: AuditContext) {
+    const payment = await prisma.payment.findFirst({
+      where: {
+        provider: providerName,
+        providerRef,
+      },
+      include: {
+        order: {
+          include: {
+            session: {
+              include: { table: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    const provider = providers[providerName];
+    const result = await provider.confirmPayment(providerRef);
+    if (result.status !== 'SUCCESS') {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'FAILED', failedAt: new Date() },
+      });
+      incrementMetric('payment_events_total', { status: 'failed', provider: providerName });
+      throw new Error('Payment failed');
+    }
+
+    const finalized = await this.finalizeSuccessfulPayment(payment.id, result.providerRef, auditContext);
+    return {
+      payment: finalized,
+      tableId: payment.order.session.table.id,
+    };
   }
 
   async cashSettleTable(tableId: string, adminName = 'Kasada Ödendi', auditContext?: AuditContext) {

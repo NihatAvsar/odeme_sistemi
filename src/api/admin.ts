@@ -5,6 +5,7 @@ export type AdminTableDto = {
   id: string;
   restaurantId: string;
   code: string;
+  qrToken: string;
   name?: string | null;
   status: string;
   releaseAt?: string | null;

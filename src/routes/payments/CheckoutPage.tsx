@@ -57,12 +57,16 @@ export function CheckoutPage() {
         tipAmount,
         payerName: 'Demo Kullanıcı',
         idempotencyKey: crypto.randomUUID(),
-        provider: 'mock-stripe',
         metadata: {
           tableId: checkoutState.tableId,
           selectedItems: checkoutState.selectedItems,
         },
       });
+
+      if (initiated.intent.redirectUrl) {
+        window.location.href = initiated.intent.redirectUrl;
+        return;
+      }
 
       await confirmPayment({
         paymentId: initiated.payment.id,

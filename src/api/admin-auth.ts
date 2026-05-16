@@ -1,29 +1,44 @@
-const ADMIN_SECRET_KEY = 'admin_secret';
-const ENV_ADMIN_SECRET = import.meta.env.VITE_ADMIN_SECRET ?? '';
+const LEGACY_ADMIN_SECRET_KEY = 'admin_secret';
+const ADMIN_SECRET_KEY = 'admin_secret_v2';
+const ADMIN_SESSION_KEY = 'admin_unlocked';
+
+function removeLegacyAdminSecret() {
+  localStorage.removeItem(LEGACY_ADMIN_SECRET_KEY);
+}
 
 export function getAdminSecret() {
-  return localStorage.getItem(ADMIN_SECRET_KEY) ?? ENV_ADMIN_SECRET;
+  removeLegacyAdminSecret();
+  return localStorage.getItem(ADMIN_SECRET_KEY) ?? '';
 }
 
 export function setAdminSecret(secret: string) {
   localStorage.setItem(ADMIN_SECRET_KEY, secret);
+  sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
 }
 
 export function clearAdminSecret() {
+  removeLegacyAdminSecret();
   localStorage.removeItem(ADMIN_SECRET_KEY);
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
+}
+
+export function clearAdminSession() {
+  sessionStorage.removeItem(ADMIN_SESSION_KEY);
 }
 
 export function requireAdminSecret() {
-  const secret = getAdminSecret();
-  if (!secret) {
-    const next = window.prompt('Admin secret girin');
-    if (next) setAdminSecret(next);
-    return next ?? '';
+  removeLegacyAdminSecret();
+  const existing = getAdminSecret();
+  if (existing && sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true') {
+    return existing;
   }
 
-  if (!localStorage.getItem(ADMIN_SECRET_KEY) && ENV_ADMIN_SECRET) {
-    setAdminSecret(ENV_ADMIN_SECRET);
+  const next = window.prompt('Admin şifresini girin');
+  if (!next) {
+    clearAdminSession();
+    return '';
   }
 
-  return secret;
+  setAdminSecret(next);
+  return next;
 }

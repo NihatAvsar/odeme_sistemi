@@ -8,7 +8,7 @@ menuRouter.get('/:tableCode', async (req, res, next) => {
   try {
     const table = await prisma.table.findFirst({
       where: {
-        OR: [{ code: req.params.tableCode }, { id: req.params.tableCode }],
+        OR: [{ code: req.params.tableCode }, { id: req.params.tableCode }, { qrToken: req.params.tableCode }],
       },
       include: { restaurant: true },
     });
