@@ -107,12 +107,11 @@ adminMenuRouter.put('/:itemId/options', async (req, res, next) => {
 
 adminMenuRouter.post('/', async (req, res, next) => {
   try {
-    const { restaurantId, categoryId, name, description, imageUrl, price, currency = 'TRY', isActive = true, isOutOfStock = false, updatedBy } = req.body as {
+    const { restaurantId, categoryId, name, description, price, currency = 'TRY', isActive = true, isOutOfStock = false, updatedBy } = req.body as {
       restaurantId?: string;
       categoryId?: string | null;
       name?: string;
       description?: string | null;
-      imageUrl?: string | null;
       price?: number;
       currency?: string;
       isActive?: boolean;
@@ -156,7 +155,6 @@ adminMenuRouter.post('/', async (req, res, next) => {
         categoryId: resolvedCategoryId,
         name,
         description,
-        imageUrl: imageUrl?.trim() || null,
         price: Number(price),
         currency,
         isActive,
@@ -184,10 +182,9 @@ adminMenuRouter.post('/', async (req, res, next) => {
 
 adminMenuRouter.patch('/:itemId', async (req, res, next) => {
   try {
-    const { name, description, imageUrl, price, currency, categoryId, isActive, updatedBy } = req.body as {
+    const { name, description, price, currency, categoryId, isActive, updatedBy } = req.body as {
       name?: string;
       description?: string | null;
-      imageUrl?: string | null;
       price?: number;
       currency?: string;
       categoryId?: string | null;
@@ -227,7 +224,6 @@ adminMenuRouter.patch('/:itemId', async (req, res, next) => {
       data: {
         name,
         description,
-        imageUrl: imageUrl === undefined ? undefined : imageUrl?.trim() || null,
         price,
         currency,
         categoryId: resolvedCategoryId,

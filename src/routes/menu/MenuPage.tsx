@@ -188,11 +188,7 @@ export function MenuPage() {
                   const qty = Object.entries(cart).reduce((sum, [key, value]) => (cartMeta[key]?.menuItemId === item.id ? sum + value : sum), 0);
                   const optionCount = item.optionGroups?.length ?? 0;
                   return (
-                    <article key={item.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 shadow-sm">
-                      {item.imageUrl ? (
-                        <img src={item.imageUrl} alt={item.name} className="h-40 w-full object-cover" loading="lazy" />
-                      ) : null}
-                      <div className="p-4">
+                    <article key={item.id} className="rounded-3xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <h3 className="font-semibold text-slate-950">{item.name}</h3>
@@ -230,7 +226,6 @@ export function MenuPage() {
                         >
                           +
                         </button>
-                      </div>
                       </div>
                     </article>
                   );

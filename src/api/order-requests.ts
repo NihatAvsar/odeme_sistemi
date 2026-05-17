@@ -13,7 +13,6 @@ export type OrderRequestDto = {
   requestedBy?: string | null;
   note?: string | null;
   items: RequestedItemDto[];
-  tableSession?: { table?: { id: string; code: string } };
   createdAt: string;
 };
 

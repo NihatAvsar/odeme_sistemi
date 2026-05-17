@@ -29,7 +29,6 @@ export type AdminTableDto = {
       status: string;
       requestedBy?: string | null;
       note?: string | null;
-      items?: Array<{ menuItemId: string; quantity: number; optionIds?: string[] }>;
       createdAt: string;
     }>;
   }>;
