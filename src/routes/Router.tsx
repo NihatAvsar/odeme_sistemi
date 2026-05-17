@@ -1,5 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { TablePage } from './table/TablePage';
 import { CheckoutPage } from './payments/CheckoutPage';
 import { PaymentSuccessPage } from './payments/PaymentSuccessPage';
@@ -13,12 +13,39 @@ import { SettingsPage } from './admin/SettingsPage';
 import { KitchenPage } from './admin/KitchenPage';
 import { ReportsPage } from './admin/ReportsPage';
 import { TableActionsPage } from './admin/TableActionsPage';
-import { clearAdminSession } from '../api/admin-auth';
+import { clearAdminSession, hasAdminSession, requireAdminSecret } from '../api/admin-auth';
 
 function CustomerRoute({ children }: { children: ReactNode }) {
   useEffect(() => {
     clearAdminSession();
   }, []);
+
+  return children;
+}
+
+function AdminRoute({ children }: { children: ReactNode }) {
+  const [authorized, setAuthorized] = useState(() => hasAdminSession());
+
+  useEffect(() => {
+    if (hasAdminSession()) {
+      setAuthorized(true);
+      return;
+    }
+
+    const secret = requireAdminSecret();
+    setAuthorized(Boolean(secret && hasAdminSession()));
+  }, []);
+
+  if (!authorized) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-xl items-center p-4">
+        <section className="w-full rounded-3xl bg-white p-6 text-center shadow-sm ring-1 ring-slate-200">
+          <h1 className="text-xl font-semibold text-slate-950">Admin girişi gerekli</h1>
+          <p className="mt-2 text-sm text-slate-500">Admin panelini açmak için şifre girmelisin.</p>
+        </section>
+      </main>
+    );
+  }
 
   return children;
 }
@@ -29,14 +56,14 @@ export const router = createBrowserRouter([
   { path: '/menu/:tableCode', element: <CustomerRoute><CustomerMenuPage /></CustomerRoute> },
   { path: '/checkout', element: <CustomerRoute><CheckoutPage /></CustomerRoute> },
   { path: '/checkout/success', element: <CustomerRoute><PaymentSuccessPage /></CustomerRoute> },
-  { path: '/admin/dashboard', element: <DashboardPage /> },
-  { path: '/admin/tables', element: <TablesPage /> },
-  { path: '/admin/pending-orders', element: <PendingOrdersPage /> },
-  { path: '/admin/settings', element: <SettingsPage /> },
-  { path: '/admin/kitchen', element: <KitchenPage /> },
-  { path: '/admin/reports', element: <ReportsPage /> },
-  { path: '/admin/table-actions', element: <TableActionsPage /> },
-  { path: '/admin/tables/:tableId', element: <TableDetailPage /> },
-  { path: '/admin/menu', element: <AdminMenuPage /> },
-  { path: '/admin/menu/:itemId/edit', element: <AdminMenuPage /> },
+  { path: '/admin/dashboard', element: <AdminRoute><DashboardPage /></AdminRoute> },
+  { path: '/admin/tables', element: <AdminRoute><TablesPage /></AdminRoute> },
+  { path: '/admin/pending-orders', element: <AdminRoute><PendingOrdersPage /></AdminRoute> },
+  { path: '/admin/settings', element: <AdminRoute><SettingsPage /></AdminRoute> },
+  { path: '/admin/kitchen', element: <AdminRoute><KitchenPage /></AdminRoute> },
+  { path: '/admin/reports', element: <AdminRoute><ReportsPage /></AdminRoute> },
+  { path: '/admin/table-actions', element: <AdminRoute><TableActionsPage /></AdminRoute> },
+  { path: '/admin/tables/:tableId', element: <AdminRoute><TableDetailPage /></AdminRoute> },
+  { path: '/admin/menu', element: <AdminRoute><AdminMenuPage /></AdminRoute> },
+  { path: '/admin/menu/:itemId/edit', element: <AdminRoute><AdminMenuPage /></AdminRoute> },
 ]);

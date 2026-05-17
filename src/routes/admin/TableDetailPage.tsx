@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { TableQrCard } from '../../components/qr/TableQrCard';
 import { cashSettleAdminTable, getAdminTable, updateAdminTableStatus, type AdminTableDto } from '../../api/admin';
-import { requireAdminSecret } from '../../api/admin-auth';
 import { getTableQrUrl } from '../../functions/qr';
 import { adminButtonClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass, adminStatCardClass, getAdminSummaryToneClasses } from './admin-theme';
 import { getTableStatusLabel, getTableStatusStyles } from './table-status';
@@ -16,7 +15,6 @@ export function TableDetailPage() {
 
   useEffect(() => {
     if (!tableId) return;
-    requireAdminSecret();
     void getAdminTable(tableId).then(setTable);
   }, [tableId]);
 
@@ -123,6 +121,10 @@ export function TableDetailPage() {
               <div key={request.id} className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm">
                 <p className="font-medium">{request.status}</p>
                 <p className="text-slate-500">{request.requestedBy ?? 'Anonim'}</p>
+                {request.items && request.items.length > 0 ? (
+                  <p className="mt-2 text-slate-700">İstenenler: {request.items.map((item) => `${item.quantity}x ${item.menuItemId}`).join(', ')}</p>
+                ) : null}
+                {request.note ? <p className="mt-2 rounded-2xl bg-slate-50 px-3 py-2 text-slate-700">Not: {request.note}</p> : null}
               </div>
             ))}
           </div>

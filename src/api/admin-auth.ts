@@ -1,6 +1,8 @@
 const LEGACY_ADMIN_SECRET_KEY = 'admin_secret';
 const ADMIN_SECRET_KEY = 'admin_secret_v2';
 const ADMIN_SESSION_KEY = 'admin_unlocked';
+const ADMIN_PROMPT_KEY = 'admin_prompt_seen';
+let adminPromptShown = false;
 
 function removeLegacyAdminSecret() {
   localStorage.removeItem(LEGACY_ADMIN_SECRET_KEY);
@@ -23,7 +25,13 @@ export function clearAdminSecret() {
 }
 
 export function clearAdminSession() {
+  adminPromptShown = false;
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  sessionStorage.removeItem(ADMIN_PROMPT_KEY);
+}
+
+export function hasAdminSession() {
+  return Boolean(getAdminSecret()) && sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
 }
 
 export function requireAdminSecret() {
@@ -33,12 +41,16 @@ export function requireAdminSecret() {
     return existing;
   }
 
+  if (adminPromptShown || sessionStorage.getItem(ADMIN_PROMPT_KEY) === 'true') return '';
+  adminPromptShown = true;
+  sessionStorage.setItem(ADMIN_PROMPT_KEY, 'true');
+
   const next = window.prompt('Admin şifresini girin');
-  if (!next) {
-    clearAdminSession();
+  if (!next?.trim()) {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
     return '';
   }
 
-  setAdminSecret(next);
-  return next;
+  setAdminSecret(next.trim());
+  return next.trim();
 }

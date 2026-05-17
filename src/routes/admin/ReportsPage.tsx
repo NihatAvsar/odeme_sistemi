@@ -12,7 +12,6 @@ import {
   type ReportSummaryDto,
   type TablePerformanceDto,
 } from '../../api/admin-reports';
-import { requireAdminSecret } from '../../api/admin-auth';
 import { formatMoney } from '../../functions/currency';
 
 type Preset = 'today' | 'yesterday' | '7days' | '30days' | 'custom';
@@ -85,7 +84,6 @@ export function ReportsPage() {
   };
 
   useEffect(() => {
-    requireAdminSecret();
     void loadReports();
   }, []);
 

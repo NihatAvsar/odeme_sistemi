@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TableQrCard } from '../../components/qr/TableQrCard';
 import { createAdminTables, getAdminTables, updateAdminTableStatus, type AdminTableDto } from '../../api/admin';
-import { requireAdminSecret } from '../../api/admin-auth';
 import { downloadCanvasPng, getTableQrUrl } from '../../functions/qr';
 import { adminButtonClass, adminCardClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass, adminStatCardClass, getAdminSummaryToneClasses } from './admin-theme';
 import { getTableStatusLabel, getTableStatusStyles } from './table-status';
@@ -19,7 +18,6 @@ export function TablesPage() {
   const [updatingTableId, setUpdatingTableId] = useState<string | null>(null);
 
   useEffect(() => {
-    requireAdminSecret();
     void getAdminTables().then(setTables);
   }, []);
 

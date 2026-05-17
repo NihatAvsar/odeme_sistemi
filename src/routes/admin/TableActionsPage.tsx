@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getAdminTableActions, updateAdminTableAction } from '../../api/admin-table-actions';
-import { requireAdminSecret } from '../../api/admin-auth';
 import type { TableActionDto, TableActionStatus, TableActionType } from '../../api/table-actions';
 import { getAdminSocket } from '../../lib/socket';
 
@@ -17,7 +16,6 @@ export function TableActionsPage() {
   };
 
   useEffect(() => {
-    requireAdminSecret();
     void refresh().catch((err) => setError(err instanceof Error ? err.message : 'Masa istekleri yüklenemedi'));
   }, []);
 

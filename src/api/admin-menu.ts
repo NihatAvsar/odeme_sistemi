@@ -7,6 +7,7 @@ export type AdminMenuItemDto = {
   categoryId?: string | null;
   name: string;
   description?: string | null;
+  imageUrl?: string | null;
   price: string | number;
   currency: string;
   isActive: boolean;

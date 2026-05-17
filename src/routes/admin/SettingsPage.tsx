@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { createAdminPromotion, getAdminPromotions, getAdminSettings, updateAdminPromotion, updateAdminSettings, type PromotionDto, type RestaurantSettingsDto } from '../../api/admin-settings';
-import { requireAdminSecret } from '../../api/admin-auth';
 import { adminButtonClass, adminPageClass, adminSecondaryButtonClass, adminSectionClass } from './admin-theme';
 
 export function SettingsPage() {
@@ -17,7 +16,6 @@ export function SettingsPage() {
   };
 
   useEffect(() => {
-    requireAdminSecret();
     void refresh();
   }, []);
 

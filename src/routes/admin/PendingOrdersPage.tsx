@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { approveOrderRequest, getPendingOrderRequests, rejectOrderRequest, type OrderRequestDto } from '../../api/order-requests';
-import { requireAdminSecret } from '../../api/admin-auth';
 import { getAdminSocket } from '../../lib/socket';
 import { getAdminTables } from '../../api/admin';
 
@@ -16,8 +15,6 @@ export function PendingOrdersPage() {
   };
 
   useEffect(() => {
-    requireAdminSecret();
-
     const socket = getAdminSocket();
     socket.connect();
 

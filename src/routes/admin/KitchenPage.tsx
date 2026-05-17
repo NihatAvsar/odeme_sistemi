@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getKitchenTickets, updateKitchenTicket, type KitchenStatus, type KitchenTicketDto } from '../../api/kitchen';
-import { requireAdminSecret } from '../../api/admin-auth';
 import { getAdminSocket } from '../../lib/socket';
 import { adminButtonClass, adminPageClass, adminSecondaryButtonClass } from './admin-theme';
 
@@ -17,8 +16,6 @@ export function KitchenPage() {
   };
 
   useEffect(() => {
-    requireAdminSecret();
-
     const socket = getAdminSocket();
     socket.connect();
     void refresh().then((nextTickets) => {
