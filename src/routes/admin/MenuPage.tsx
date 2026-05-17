@@ -5,6 +5,7 @@ import {
   createAdminMenuItem,
   getAdminMenuCategories,
   getAdminMenu,
+  deleteAdminMenuItem,
   updateAdminMenuItem,
   updateAdminMenuOptions,
   updateAdminMenuStock,
@@ -454,6 +455,19 @@ export function MenuPage() {
                     className="rounded-xl border px-3 py-2 text-sm font-medium text-rose-600"
                   >
                     {item.isActive ? 'Pasifleştir' : 'Aktifleştir'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm(`${item.name} ürünü menüden silinsin mi?`)) return;
+                      await deleteAdminMenuItem(item.id, getAdminSecret());
+                      if (editingId === item.id) resetEditor();
+                      setStatus('Ürün silindi');
+                      await refresh();
+                    }}
+                    className="rounded-xl bg-rose-600 px-3 py-2 text-sm font-medium text-white"
+                  >
+                    Sil
                   </button>
                 </div>
               </article>

@@ -300,12 +300,8 @@ adminMenuRouter.delete('/:itemId', async (req, res, next) => {
       return;
     }
 
-    const item = await prisma.menuItem.update({
+    const item = await prisma.menuItem.delete({
       where: { id: existing.id },
-      data: {
-        isActive: false,
-        updatedBy,
-      },
     });
 
     await writeAuditLog({
@@ -314,7 +310,7 @@ adminMenuRouter.delete('/:itemId', async (req, res, next) => {
       action: 'menu.delete',
       entityType: 'MenuItem',
       entityId: item.id,
-      payload: { before: { isActive: existing.isActive }, after: { isActive: false } },
+      payload: { before: existing, deletedBy: updatedBy },
       ...getAuditRequestContext(req),
     });
 
